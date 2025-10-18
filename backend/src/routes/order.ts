@@ -23,8 +23,9 @@ router.get('/', async (req: Request, res: Response) => {
     const whereClauses = [];
     let paramIndex = 1;
     if (date && typeof date === 'string') {
-      whereClauses.push(`o.created_at::date = $${paramIndex++}::date`);
+      whereClauses.push(`o.created_at >= $${paramIndex}::date AND o.created_at < ($${paramIndex}::date + '1 day'::interval)`);
       params.push(date);
+      paramIndex++;
     }
     if (orderType && orderType !== 'all' && typeof orderType === 'string') {
       whereClauses.push(`o.order_type = $${paramIndex++}`);
@@ -32,6 +33,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
     if (whereClauses.length > 0) { baseQuery += ` WHERE ${whereClauses.join(' AND ')}`; }
     baseQuery += ` ORDER BY o.created_at DESC;`;
+    console.log('Executing query for fetching orders:', baseQuery, params);
     const ordersResult = await client.query(baseQuery, params);
     const orders = ordersResult.rows;
     if (orders.length > 0) {
