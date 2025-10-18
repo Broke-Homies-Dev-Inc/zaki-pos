@@ -169,8 +169,8 @@ CREATE TABLE IF NOT EXISTS inventory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     item_name VARCHAR(255) NOT NULL,
     quantity DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    unit VARCHAR(50) NOT NULL,
-    reorder_level DECIMAL(10, 2) DEFAULT 0,
+    low_stock_threshold DECIMAL(10, 2) DEFAULT 0,
+    cost DECIMAL(10, 2) DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS inventory (
 CREATE INDEX IF NOT EXISTS idx_inventory_item_name ON inventory(item_name);
 
 COMMENT ON TABLE inventory IS 'Inventory management with stock levels';
-COMMENT ON COLUMN inventory.reorder_level IS 'Minimum quantity before reorder alert';
+COMMENT ON COLUMN inventory.low_stock_threshold IS 'Minimum quantity before reorder alert';
 
 -- ==========================================
 -- 7. MENU ITEMS TABLE
@@ -283,6 +283,18 @@ CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_menu_item_id ON order_items(menu_item_id);
 
 COMMENT ON TABLE order_items IS 'Line items for each order';
+
+CREATE TABLE IF NOT EXISTS loyalty_transactions (
+    id SERIAL PRIMARY KEY,
+    customer_id uuid REFERENCES customers(id) ON DELETE CASCADE,
+    order_id uuid REFERENCES orders(id) ON DELETE SET NULL,
+    points_earned INTEGER DEFAULT 0,
+    points_redeemed INTEGER DEFAULT 0,
+    transaction_type VARCHAR(20) CHECK (transaction_type IN ('earned', 'redeemed', 'adjustment')),
+    description TEXT,
+    order_amount DECIMAL(10, 2),
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
 -- ==========================================
 -- SAMPLE DATA (Optional - for testing)
@@ -458,14 +470,13 @@ SELECT
     id,
     item_name,
     quantity,
-    unit,
-    reorder_level,
-    ROUND((quantity / reorder_level * 100)::numeric, 2) AS stock_percentage
+    low_stock_threshold,
+    ROUND((quantity / low_stock_threshold * 100)::numeric, 2) AS stock_percentage
 FROM inventory
-WHERE quantity <= reorder_level
+WHERE quantity <= low_stock_threshold
 ORDER BY stock_percentage ASC;
 
-COMMENT ON VIEW low_stock_inventory IS 'Inventory items below reorder level';
+COMMENT ON VIEW low_stock_inventory IS 'Inventory items below low stock threshold';
 
 -- ==========================================
 -- UTILITY QUERIES
