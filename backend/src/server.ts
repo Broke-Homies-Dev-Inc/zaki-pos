@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import apiRoutes from './routes/Index'; // This line should now work
 
 dotenv.config();
+console.log(process.env.DATABASE_URL)
 
 const app = express();
 const port = process.env.PORT || 4000;

@@ -17,6 +17,8 @@ export interface OrderWithItems extends Order {
   table_name: string | null;
   section_name: string | null;
   floor_name: string | null;
+  points_redeemed?: number | null;
+  points_earned?: number | null;
   // THE FIX: Add the missing optional properties here
   take_away_method?: string | null;
   car_details?: string | null;
@@ -56,7 +58,10 @@ export function useOrders() {
   const fetchOrders = useCallback(async (date: Date, orderType: OrderTypeFilter) => {
     try {
       setLoading(true);
-      const formattedDate = date.toISOString().split('T')[0];
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      const formattedDate = `${yyyy}-${mm}-${dd}`;
       const params: { date: string; orderType?: string } = { date: formattedDate };
       if (orderType !== 'all') {
         params.orderType = orderType;
