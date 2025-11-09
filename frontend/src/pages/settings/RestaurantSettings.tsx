@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Save } from "lucide-react";
-import axios from "axios";
+import api from "../../lib/api";
 import { useRestaurantSettingsContext } from "../../contexts/RestaurantSettingsContext";
 
 interface RestaurantSettingsProps {
@@ -34,9 +34,7 @@ export function RestaurantSettings({ onBack }: RestaurantSettingsProps) {
 
     const fetchSettings = async () => {
         try {
-            const response = await axios.get(
-                "http://localhost:4000/api/setting/settings"
-            );
+            const response = await api.get("/setting/settings");
             setSettings(response.data);
         } catch (error) {
             console.error("Error fetching settings:", error);
@@ -49,10 +47,7 @@ export function RestaurantSettings({ onBack }: RestaurantSettingsProps) {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await axios.post(
-                "http://localhost:4000/api/setting/settings",
-                settings
-            );
+            await api.post("/setting/settings", settings);
             alert("Settings saved successfully!");
             // Refetch settings in context to update navbar
             await refetch();

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Save, Gift } from "lucide-react";
-import axios from "axios";
+import api from "../../lib/api";
 import { useRestaurantSettingsContext } from "../../contexts/RestaurantSettingsContext";
 
 interface LoyaltySettingsProps {
@@ -29,9 +29,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
 
     const fetchSettings = async () => {
         try {
-            const response = await axios.get(
-                "http://localhost:4000/api/setting/settings"
-            );
+            const response = await api.get("/setting/settings");
             console.log("Loyalty Settings Response:", response.data);
             setSettings({
                 loyalty_points_enabled:
@@ -53,9 +51,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
         setSaving(true);
         try {
             // Fetch all current settings first
-            const currentResponse = await axios.get(
-                "http://localhost:4000/api/setting/settings"
-            );
+            const currentResponse = await api.get("/setting/settings");
             const currentSettings = currentResponse.data;
 
             // Merge with loyalty settings
@@ -66,10 +62,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                 points_value: settings.points_value,
             };
 
-            await axios.post(
-                "http://localhost:4000/api/setting/settings",
-                updatedSettings
-            );
+            await api.post("/setting/settings", updatedSettings);
             alert("Loyalty settings saved successfully!");
             await refetch();
         } catch (error) {
