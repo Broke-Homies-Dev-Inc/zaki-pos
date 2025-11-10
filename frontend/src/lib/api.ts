@@ -1,15 +1,24 @@
 import axios from 'axios';
 
-// Read backend URL from Vite env. Vite only exposes variables prefixed with VITE_.
-// Use VITE_BACKEND_URL (e.g. VITE_BACKEND_URL=http://localhost:4000) in `frontend/.env`.
-const rawBackend = (import.meta as any).VITE_BACKEND_URL || 'http://localhost:4000';
+// Tell TypeScript that `import.meta.env` has our variable
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_BACKEND_URL: string;
+    readonly VITE_APP_NAME: string;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+}
+
+// Now read it properly:
+const rawBackend = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
 const backend = String(rawBackend).replace(/\/$/, '');
 
-// baseURL should include the /api prefix
 const api = axios.create({
   baseURL: `${backend}/api`,
 });
 
-export const BACKEND_URL = backend; // e.g. 'http://localhost:4000'
-
+export const BACKEND_URL = backend;
 export default api;
