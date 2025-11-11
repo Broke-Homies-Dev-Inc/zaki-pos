@@ -1,18 +1,20 @@
-FROM node:20-bookworm AS build
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build:vite
-
-# ---- Production stage ----
+# ---- Development stage ----
 FROM node:20-bookworm
 
+# Set working directory
 WORKDIR /app
-RUN npm install -g serve
-COPY --from=build /app/dist ./dist
-COPY serve.json ./dist/serve.json
 
-EXPOSE 3000
-CMD ["serve", "-s", "dist", "-l", "3000", "--config", "serve.json"]
+# Copy only package files first (for caching)
+COPY package*.json ./
+
+# Install all dependencies (not using npm ci so we can edit freely)
+RUN npm install
+
+# Copy the rest of the project files
+COPY . .
+
+# Expose the Vite development port (default is 5173)
+EXPOSE 5173
+
+# Run Vite in dev mode
+CMD ["npm", "run", "dev:vite", "--", "--host"]
