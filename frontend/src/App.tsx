@@ -5,6 +5,7 @@ import { Orders } from "./pages/Orders";
 import { Menu } from "./pages/Menu";
 import { Inventory } from "./pages/Inventory";
 import { Billing } from "./pages/Billing";
+import Reports from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { Customers } from "./pages/Customers";
 import { RestaurantSettingsProvider } from "./contexts/RestaurantSettingsContext";
@@ -21,6 +22,7 @@ function App() {
                         <Route path="menu" element={<Menu />} />
                         <Route path="inventory" element={<Inventory />} />
                         <Route path="billing" element={<Billing />} />
+                        <Route path="reports" element={<Reports />} />
                         <Route path="customers" element={<Customers />} />
                         <Route path="settings" element={<Settings />} />
                     </Route>

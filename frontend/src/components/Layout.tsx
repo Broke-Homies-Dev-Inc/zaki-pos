@@ -7,6 +7,7 @@ import {
     Receipt,
     Settings,
     Users,
+    BarChart2,
 } from "lucide-react";
 import { useRestaurantSettingsContext } from "../contexts/RestaurantSettingsContext";
 
@@ -16,6 +17,7 @@ const navigation = [
     { name: "Menu", href: "/menu", icon: Receipt },
     { name: "Inventory", href: "/inventory", icon: Package },
     { name: "Billing", href: "/billing", icon: FileText },
+    { name: "Reports", href: "/reports", icon: BarChart2 },
     { name: "Customers", href: "/customers", icon: Users },
     { name: "Settings", href: "/settings", icon: Settings },
 ];

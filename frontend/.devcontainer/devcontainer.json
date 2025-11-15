@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "name": "Zaki Frontend Dev Container",
+  "dockerComposeFile": [
+    "../../../compose/docker-compose.yml"
+  ],
+  "service": "frontend",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+  "mounts": [
+    "source=frontend_node_modules,target=/app/node_modules,type=volume"
+  ],
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}

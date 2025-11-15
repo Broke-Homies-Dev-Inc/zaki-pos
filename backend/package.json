@@ -10,12 +10,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/sqlite3": "^3.1.11",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "html-pdf-node": "^1.0.8",
     "pg": "^8.16.3",
-    "recharts": "^3.3.0"
+    "recharts": "^3.3.0",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

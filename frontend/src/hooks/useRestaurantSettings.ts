@@ -1,56 +1,76 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
-import type { Database } from '../lib/database.types';
 
-type RestaurantSettings = Database['public']['Tables']['restaurant_settings']['Row'];
-type RestaurantSettingsInsert = Database['public']['Tables']['restaurant_settings']['Insert'];
+// Define the "shape" of the settings object
+export interface RestaurantSettings {
+  id?: string;
+  restaurant_name: string;
+  address: string;
+  contact_number: string;
+  registration_number: string;
+  tax_rate: number;
+  loyalty_points_enabled: boolean;
+  loyalty_points_per_100: number;
+  points_value: number;
+  print_preview_enabled: boolean;
+  min_points_to_redeem: number; // <-- ADDED THIS LINE
+}
 
-const DEFAULT_SETTINGS: Partial<RestaurantSettings> = {
-  restaurant_name: 'My Restaurant',
-  address: '123 Pizza Lane',
-  contact_number: '555-123-4567',
+// Default state
+const defaultSettings: RestaurantSettings = {
+  restaurant_name: 'Your Restaurant',
+  address: '123 Main St',
+  contact_number: '555-1234',
+  registration_number: '',
+  tax_rate: 0,
+  loyalty_points_enabled: true,
+  loyalty_points_per_100: 10,
+  points_value: 0.1,
+  print_preview_enabled: true,
+  min_points_to_redeem: 200, // <-- ADDED THIS LINE
 };
 
 export function useRestaurantSettings() {
-  const [settings, setSettings] = useState<RestaurantSettings | null>(null);
+  const [settings, setSettings] = useState<RestaurantSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get<RestaurantSettings>('/setting/settings');
-      setSettings(response.data);
+      if (response.data) {
+        setSettings(response.data);
+      } else {
+        setSettings(defaultSettings);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch settings');
+      setSettings(defaultSettings);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const saveSettings = async (settingsData: RestaurantSettingsInsert) => {
+  const updateSettings = useCallback(async (newSettings: Partial<RestaurantSettings>) => {
     try {
-      const response = await api.post<RestaurantSettings>('/setting/settings', settingsData);
+      setLoading(true);
+      const response = await api.post<RestaurantSettings>('/setting/settings', newSettings);
       setSettings(response.data);
-      return { success: true, data: response.data };
+      setError(null);
+      return response.data;
     } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Failed to save settings',
-      };
+      setError(err instanceof Error ? err.message : 'Failed to save settings');
+      throw err;
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [fetchSettings]);
 
-  return {
-    settings: settings || (DEFAULT_SETTINGS as RestaurantSettings),
-    loading,
-    error,
-    saveSettings,
-    refetch: fetchSettings,
-  };
+  return { settings, loading, error, fetchSettings, updateSettings };
 }
