@@ -115,6 +115,7 @@ export interface Database {
       }
       order_items: {
         Row: {
+          is_complimentary: boolean
           created_at: string
           id: string
           menu_item_id: string
@@ -124,6 +125,7 @@ export interface Database {
           unit_price: number
         }
         Insert: {
+          is_complimentary?: boolean
           created_at?: string
           id?: string
           menu_item_id: string
@@ -133,6 +135,7 @@ export interface Database {
           unit_price: number
         }
         Update: {
+          is_complimentary?: boolean
           created_at?: string
           id?: string
           menu_item_id?: string
@@ -204,6 +207,7 @@ export interface Database {
           loyalty_points_enabled?: boolean
           loyalty_points_per_100?: number
           points_value?: number
+          currency?: string
           print_preview_enabled?: boolean
           updated_at: string
         }
@@ -218,6 +222,7 @@ export interface Database {
           loyalty_points_enabled?: boolean
           loyalty_points_per_100?: number
           points_value?: number
+          currency?: string
           print_preview_enabled?: boolean
           updated_at?: string
         }
@@ -232,6 +237,7 @@ export interface Database {
           loyalty_points_enabled?: boolean
           loyalty_points_per_100?: number
           points_value?: number
+          currency?: string
           print_preview_enabled?: boolean
           updated_at?: string
         }

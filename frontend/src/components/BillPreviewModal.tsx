@@ -157,10 +157,10 @@ export function BillPreviewModal({ bill, onClose }: BillPreviewModalProps) {
                                         {item.quantity}
                                     </td>
                                     <td className="px-4 py-3 text-right text-gray-900">
-                                        {formatCurrency(item.unit_price)}
+                                        {formatCurrency(item.unit_price, settings?.currency || 'OMR')}
                                     </td>
                                     <td className="px-4 py-3 text-right text-gray-900 font-medium">
-                                        {formatCurrency(item.total_price)}
+                                        {formatCurrency(item.total_price, settings?.currency || 'OMR')}
                                     </td>
                                 </tr>
                             ))}
@@ -170,20 +170,20 @@ export function BillPreviewModal({ bill, onClose }: BillPreviewModalProps) {
                     <div className="ml-auto max-w-sm space-y-2 mt-6">
                         <div className="flex justify-between py-2 text-gray-700">
                             <span>Subtotal:</span>
-                            <span className="font-medium">
-                                {formatCurrency(bill.orders.subtotal)}
+                                <span className="font-medium">
+                                {formatCurrency(bill.orders.subtotal, settings?.currency || 'OMR')}
                             </span>
                         </div>
                         <div className="flex justify-between py-2 text-gray-700">
                             <span>Tax ({(taxRate * 100).toFixed(0)}%):</span>
                             <span className="font-medium">
-                                {formatCurrency(bill.orders.tax_amount)}
+                                {formatCurrency(bill.orders.tax_amount, settings?.currency || 'OMR')}
                             </span>
                         </div>
                         <div className="flex justify-between py-3 border-t-2 border-gray-900 text-lg font-bold text-gray-900">
                             <span>Grand Total:</span>
                             <span>
-                                {formatCurrency(bill.orders.grand_total)}
+                                {formatCurrency(bill.orders.grand_total, settings?.currency || 'OMR')}
                             </span>
                         </div>
                     </div>

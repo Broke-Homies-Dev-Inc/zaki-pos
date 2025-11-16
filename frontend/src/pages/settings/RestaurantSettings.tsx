@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Save } from "lucide-react";
 import api from "../../lib/api";
-import { useRestaurantSettingsContext } from "../../contexts/RestaurantSettingsContext";
+import { useRestaurantSettingsContext } from "../../contexts/useRestaurantSettingsContext";
 
 interface RestaurantSettingsProps {
     onBack: () => void;
@@ -14,6 +14,7 @@ interface Settings {
     contact_number: string;
     registration_number: string;
     tax_rate: number;
+    currency?: string;
 }
 
 export function RestaurantSettings({ onBack }: RestaurantSettingsProps) {
@@ -24,6 +25,7 @@ export function RestaurantSettings({ onBack }: RestaurantSettingsProps) {
         contact_number: "",
         registration_number: "",
         tax_rate: 0,
+        currency: 'OMR',
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -177,6 +179,24 @@ export function RestaurantSettings({ onBack }: RestaurantSettingsProps) {
                         <p className="text-sm text-gray-500 mt-1">
                             This tax rate will be applied to orders
                         </p>
+                    </div>
+
+                    {/* Currency */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Currency
+                        </label>
+                        <select
+                            value={settings.currency}
+                            onChange={(e) => handleChange('currency', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                            <option value="OMR">Omani Riyal (OMR)</option>
+                            <option value="INR">Indian Rupee (INR)</option>
+                            <option value="AED">UAE Dirham (AED)</option>
+                            <option value="SAR">Saudi Riyal (SAR)</option>
+                            <option value="USD">US Dollar (USD)</option>
+                        </select>
                     </div>
 
                     {/* Save Button */}

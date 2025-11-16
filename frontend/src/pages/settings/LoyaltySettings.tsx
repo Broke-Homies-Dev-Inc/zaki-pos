@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Save, Gift } from "lucide-react";
 import api from "../../lib/api";
-import { useRestaurantSettingsContext } from "../../contexts/RestaurantSettingsContext";
+import { useRestaurantSettingsContext } from "../../contexts/useRestaurantSettingsContext";
 
 interface LoyaltySettingsProps {
     onBack: () => void;
@@ -15,6 +15,7 @@ interface LoyaltySettings {
 
 export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
     const { refetch } = useRestaurantSettingsContext();
+    const { settings: restaurantSettings } = useRestaurantSettingsContext();
     const [settings, setSettings] = useState<LoyaltySettings>({
         loyalty_points_enabled: true,
         loyalty_points_per_100: 10,
@@ -141,7 +142,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                     {/* Points Per 100 */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Points per ₹100 Spent *
+                            Points per {restaurantSettings?.currency || 'OMR'}100 Spent *
                         </label>
                         <input
                             type="number"
@@ -157,7 +158,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                             }
                             disabled={!settings.loyalty_points_enabled}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            placeholder="Enter points per ₹100"
+                            placeholder={`Enter points per ${restaurantSettings?.currency || 'OMR'}100`}
                         />
                         <p className="text-sm text-gray-500 mt-2">
                             Customers will earn{" "}
@@ -165,14 +166,14 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                             {settings.loyalty_points_per_100 === 1
                                 ? "point"
                                 : "points"}{" "}
-                            for every ₹100 they spend
+                            for every {restaurantSettings?.currency || 'OMR'}100 they spend
                         </p>
                     </div>
 
                     {/* Points Value (Redemption Rate) */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Value per Point (₹) *
+                            Value per Point ({restaurantSettings?.currency || 'OMR'}) *
                         </label>
                         <input
                             type="number"
@@ -192,15 +193,15 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                             placeholder="Enter value per point"
                         />
                         <p className="text-sm text-gray-500 mt-2">
-                            Each loyalty point is worth ₹
+                            Each loyalty point is worth {restaurantSettings?.currency || 'OMR'}
                             {settings.points_value.toFixed(2)} (
                             {settings.points_value === 0.1
-                                ? "10 points = ₹1"
+                                ? `10 points = ${restaurantSettings?.currency || 'OMR'}1`
                                 : settings.points_value === 1
-                                ? "1 point = ₹1"
-                                : `${(1 / settings.points_value).toFixed(
+                                ? `1 point = ${restaurantSettings?.currency || 'OMR'}1`
+                                 : `${(1 / settings.points_value).toFixed(
                                       0
-                                  )} points = ₹1`}
+                                  )} points = ${restaurantSettings?.currency || 'OMR'}1`}
                             )
                         </p>
                     </div>
@@ -212,7 +213,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                         </h4>
                         <div className="space-y-2 text-sm text-blue-800">
                             <div className="flex justify-between">
-                                <span>Order Total: ₹250</span>
+                                <span>Order Total: {restaurantSettings?.currency || 'OMR'}250</span>
                                 <span className="font-semibold">
                                     →{" "}
                                     {Math.floor(
@@ -223,7 +224,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                                 </span>
                             </div>
                             <div className="flex justify-between">
-                                <span>Order Total: ₹500</span>
+                                <span>Order Total: {restaurantSettings?.currency || 'OMR'}500</span>
                                 <span className="font-semibold">
                                     →{" "}
                                     {Math.floor(
@@ -234,7 +235,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                                 </span>
                             </div>
                             <div className="flex justify-between">
-                                <span>Order Total: ₹1,000</span>
+                                <span>Order Total: {restaurantSettings?.currency || 'OMR'}1,000</span>
                                 <span className="font-semibold">
                                     →{" "}
                                     {Math.floor(
@@ -255,24 +256,24 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
                         <div className="space-y-2 text-sm text-green-800">
                             <div className="flex justify-between">
                                 <span>200 points redeemed</span>
-                                <span className="font-semibold">
-                                    → ₹
+                                    <span className="font-semibold">
+                                    → {restaurantSettings?.currency || 'OMR'}
                                     {(200 * settings.points_value).toFixed(2)}{" "}
                                     discount
                                 </span>
                             </div>
                             <div className="flex justify-between">
                                 <span>500 points redeemed</span>
-                                <span className="font-semibold">
-                                    → ₹
+                                    <span className="font-semibold">
+                                    → {restaurantSettings?.currency || 'OMR'}
                                     {(500 * settings.points_value).toFixed(2)}{" "}
                                     discount
                                 </span>
                             </div>
                             <div className="flex justify-between">
                                 <span>1,000 points redeemed</span>
-                                <span className="font-semibold">
-                                    → ₹
+                                    <span className="font-semibold">
+                                    → {restaurantSettings?.currency || 'OMR'}
                                     {(1000 * settings.points_value).toFixed(2)}{" "}
                                     discount
                                 </span>

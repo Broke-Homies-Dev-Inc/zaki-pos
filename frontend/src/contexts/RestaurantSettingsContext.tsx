@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useMemo } from "react";
 import type { ReactNode } from "react";
 import { useRestaurantSettings } from "../hooks/useRestaurantSettings";
 import type { Database } from "../lib/database.types";
@@ -22,7 +22,7 @@ interface RestaurantSettingsContextType {
     refetch: () => Promise<void>;
 }
 
-const RestaurantSettingsContext = createContext<
+export const RestaurantSettingsContext = createContext<
     RestaurantSettingsContextType | undefined
 >(undefined);
 
@@ -33,19 +33,17 @@ export function RestaurantSettingsProvider({
 }) {
     const restaurantSettings = useRestaurantSettings();
 
+    const contextValue = useMemo(() => restaurantSettings, [
+        restaurantSettings.settings,
+        restaurantSettings.loading,
+        restaurantSettings.error,
+        restaurantSettings.refetch,
+        restaurantSettings.saveSettings,
+    ]);
+
     return (
-        <RestaurantSettingsContext.Provider value={restaurantSettings}>
+        <RestaurantSettingsContext.Provider value={contextValue}>
             {children}
         </RestaurantSettingsContext.Provider>
     );
-}
-
-export function useRestaurantSettingsContext() {
-    const context = useContext(RestaurantSettingsContext);
-    if (context === undefined) {
-        throw new Error(
-            "useRestaurantSettingsContext must be used within a RestaurantSettingsProvider"
-        );
-    }
-    return context;
 }

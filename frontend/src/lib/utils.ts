@@ -14,10 +14,13 @@ export function calculateGrandTotal(subtotal: number, taxAmount: number): number
 }
 
 // formatCurrency is the ONLY place we should use .toFixed or similar methods.
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-IN', {
+export function formatCurrency(amount: number, currency: string = 'OMR'): string {
+  // Use en-OM as the default locale for Omani Riyal. If you need to format in a
+  // different currency (e.g. INR), pass the currency code as the 2nd arg.
+  const locale = currency === 'OMR' ? 'en-OM' : 'en-IN';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'INR',
+    currency,
   }).format(amount);
 }
 

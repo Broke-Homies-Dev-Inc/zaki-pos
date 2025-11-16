@@ -3,6 +3,7 @@ import { X, IndianRupee, CreditCard, Smartphone, BookUser, Trash2 } from 'lucide
 import type { RestaurantTable } from '../hooks/useSettings';
 import api from '../lib/api';
 import { formatCurrency, formatDateTime } from '../lib/utils';
+import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 
 type PaymentMethod = 'cash' | 'card' | 'due' | 'other';
 type Payment = {
@@ -29,6 +30,7 @@ export function PaymentModal({
 }: PaymentModalProps) {
 
   const activeOrder = table.active_order!;
+  const { settings } = useRestaurantSettingsContext();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +58,18 @@ export function PaymentModal({
   useEffect(() => {
     setAmountToAdd(amountRemaining.toString());
   }, [amountRemaining]);
+
+  // Close the modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
 
   const paymentMethods = [
@@ -156,9 +170,9 @@ export function PaymentModal({
         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
           <div className="bg-gray-50 p-4 rounded-lg text-center">
             <label className="text-sm font-medium text-gray-600">Total Amount Due</label>
-            <p className="text-4xl font-bold text-blue-600">{formatCurrency(finalAmountToPay)}</p>
+        <p className="text-4xl font-bold text-blue-600">{formatCurrency(finalAmountToPay, settings?.currency || 'OMR')}</p>
             {pointsToRedeem > 0 && (
-              <p className="text-sm text-green-600">(After {formatCurrency(activeOrder.grand_total - finalAmountToPay)} discount)</p>
+              <p className="text-sm text-green-600">(After {formatCurrency(activeOrder.grand_total - finalAmountToPay, settings?.currency || 'OMR')} discount)</p>
             )}
           </div>
           
@@ -170,7 +184,7 @@ export function PaymentModal({
                   <div key={i} className="flex justify-between items-center bg-gray-100 p-2 rounded-md">
                     <span className="font-medium capitalize">{p.method}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-800">{formatCurrency(p.amount)}</span>
+                      <span className="text-gray-800">{formatCurrency(p.amount, settings?.currency || 'OMR')}</span>
                       <button onClick={() => handleRemovePayment(i)} className="text-red-500 hover:text-red-700">
                         <Trash2 size={16} />
                       </button>
@@ -182,7 +196,7 @@ export function PaymentModal({
               {amountRemaining > 0.01 && (
                 <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-center">
                   <label className="text-sm font-medium text-yellow-800">Amount Remaining</label>
-                  <p className="text-2xl font-bold text-yellow-900">{formatCurrency(amountRemaining)}</p>
+                  <p className="text-2xl font-bold text-yellow-900">{formatCurrency(amountRemaining, settings?.currency || 'OMR')}</p>
                 </div>
               )}
 
@@ -232,7 +246,7 @@ export function PaymentModal({
                   <label className="block text-sm font-medium text-gray-700">Balance (Change)</label>
                   <input
                     type="text" readOnly
-                    value={formatCurrency(balance)}
+                    value={formatCurrency(balance, settings?.currency || 'OMR')}
                     className={`w-full px-3 py-2 border rounded-md bg-gray-100 ${balance < 0 ? 'text-red-600' : 'text-green-600'}`}
                   />
                 </div>

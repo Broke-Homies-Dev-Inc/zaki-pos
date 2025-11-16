@@ -9,7 +9,7 @@ import {
     Users,
     BarChart2,
 } from "lucide-react";
-import { useRestaurantSettingsContext } from "../contexts/RestaurantSettingsContext";
+import { useRestaurantSettingsContext } from "../contexts/useRestaurantSettingsContext";
 
 const navigation = [
     { name: "Dashboard", href: "/", icon: Home },

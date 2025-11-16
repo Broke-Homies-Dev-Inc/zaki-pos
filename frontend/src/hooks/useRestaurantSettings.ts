@@ -13,6 +13,7 @@ export interface RestaurantSettings {
   loyalty_points_per_100: number;
   points_value: number;
   print_preview_enabled: boolean;
+  currency?: string;
   min_points_to_redeem: number; // <-- ADDED THIS LINE
 }
 
@@ -28,6 +29,7 @@ const defaultSettings: RestaurantSettings = {
   points_value: 0.1,
   print_preview_enabled: true,
   min_points_to_redeem: 200, // <-- ADDED THIS LINE
+  currency: 'OMR',
 };
 
 export function useRestaurantSettings() {
@@ -72,5 +74,5 @@ export function useRestaurantSettings() {
     fetchSettings();
   }, [fetchSettings]);
 
-  return { settings, loading, error, fetchSettings, updateSettings };
+  return { settings, loading, error, refetch: fetchSettings, saveSettings: updateSettings };
 }

@@ -51,14 +51,14 @@ router.get('/', async (req: Request, res: Response) => {
         // DB uses integer ids
         const numericIds = orderIds.map(id => Number(id));
         itemsResult = await client.query(`
-          SELECT oi.order_id, oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, mi.name as menu_item_name
+          SELECT oi.order_id, oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, oi.is_complimentary AS is_complimentary, mi.name as menu_item_name
           FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id
           WHERE oi.order_id = ANY($1::int4[])
         `, [numericIds]);
       } else {
         // default to uuid-based ids
         itemsResult = await client.query(`
-          SELECT oi.order_id, oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, mi.name as menu_item_name
+          SELECT oi.order_id, oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, oi.is_complimentary AS is_complimentary, mi.name as menu_item_name
           FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id
           WHERE oi.order_id = ANY($1::uuid[])
         `, [orderIds]);
@@ -107,7 +107,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     // Fetch order items with menu item details
     const itemsResult = await client.query(`
-      SELECT oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, mi.name as menu_item_name
+      SELECT oi.id, oi.menu_item_id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, oi.is_complimentary AS is_complimentary, mi.name as menu_item_name
       FROM order_items oi 
       JOIN menu_items mi ON mi.id = oi.menu_item_id
       WHERE oi.order_id = $1
@@ -121,10 +121,10 @@ router.get('/:id', async (req: Request, res: Response) => {
         const settingsResult = await client.query(
           'SELECT loyalty_points_enabled, loyalty_points_per_100 FROM restaurant_settings LIMIT 1'
         );
-        
+
         if (settingsResult.rows.length > 0) {
           const { loyalty_points_enabled, loyalty_points_per_100 } = settingsResult.rows[0];
-          
+
           if (loyalty_points_enabled) {
             const pointsEarned = Math.floor((order.grand_total / 100) * loyalty_points_per_100);
             order.loyalty_points_earned = pointsEarned;
@@ -154,7 +154,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { tableName } = req.body;
-  
+
   const client = await pool.connect();
   try {
     // Fetch order details
@@ -183,7 +183,7 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
 
     // Fetch order items
     const itemsResult = await client.query(`
-      SELECT oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, mi.name as menu_item_name
+      SELECT oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, oi.is_complimentary AS is_complimentary, mi.name as menu_item_name
       FROM order_items oi 
       JOIN menu_items mi ON mi.id = oi.menu_item_id
       WHERE oi.order_id = $1
@@ -196,10 +196,10 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
       const settingsResult = await client.query(
         'SELECT loyalty_points_enabled, loyalty_points_per_100 FROM restaurant_settings LIMIT 1'
       );
-      
+
       if (settingsResult.rows.length > 0) {
         const { loyalty_points_enabled, loyalty_points_per_100 } = settingsResult.rows[0];
-        
+
         if (loyalty_points_enabled) {
           const pointsEarned = Math.floor((order.grand_total / 100) * loyalty_points_per_100);
           order.loyalty_points_earned = pointsEarned;
@@ -222,18 +222,25 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
     };
 
     // Generate HTML for the bill
+    const currency = (settings && settings.currency) ? settings.currency : 'OMR';
+    const locale = currency === 'OMR' ? 'en-OM' : 'en-IN';
     const formatCurrency = (amount: number | string) => {
       const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-      return `₹${numAmount.toFixed(2)}`;
+      try {
+        return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(numAmount as number);
+      } catch (err) {
+        // Fallback: prefix currency code
+        return `${currency}${(numAmount as number).toFixed(2)}`;
+      }
     };
     const formatDateTime = (date: string) => {
       const d = new Date(date);
-      return d.toLocaleString('en-IN', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric', 
-        hour: '2-digit', 
-        minute: '2-digit' 
+      return d.toLocaleString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
     };
 
@@ -332,8 +339,8 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
         <div class="line"></div>
 
         <div style="margin: 15px 0;">
-          ${order.order_items && order.order_items.length > 0 ? 
-            order.order_items.map((item: any) => `
+          ${order.order_items && order.order_items.length > 0 ?
+        order.order_items.map((item: any) => `
               <div class="item-row">
                 <div class="item-name">${item.menu_item_name}</div>
                 <div class="item-details">
@@ -341,9 +348,9 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
                   <span>${formatCurrency(item.total_price)}</span>
                 </div>
               </div>
-            `).join('') 
-            : '<div class="center">No items</div>'
-          }
+            `).join('')
+        : '<div class="center">No items</div>'
+      }
         </div>
 
         <div class="total-section">
@@ -392,7 +399,7 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
 
     // Generate PDF
     const file = { content: billHTML };
-    const options = { 
+    const options = {
       format: 'A4',
       margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
       path: ''  // Will be set below
@@ -401,20 +408,20 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
     // Save PDF to bill_output folder
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `Bill-${order.order_number}-${timestamp}.pdf`;
-    
+
     // Ensure directory exists
     const billOutputDir = path.join(__dirname, '../../bill_output');
     if (!fs.existsSync(billOutputDir)) {
       fs.mkdirSync(billOutputDir, { recursive: true });
     }
-    
+
     const outputPath = path.join(billOutputDir, filename);
     options.path = outputPath;
 
     // Generate and save PDF
     try {
       const pdfResult: any = await (htmlPdf as any).generatePdf(file, options);
-      
+
       // If the library returns a buffer, write it
       if (pdfResult && Buffer.isBuffer(pdfResult)) {
         fs.writeFileSync(outputPath, pdfResult);
@@ -425,8 +432,8 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
       throw pdfError;
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Bill generated successfully',
       filename: filename,
       path: outputPath
@@ -446,30 +453,30 @@ router.post('/', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     // VALIDATION 1: Dine-in orders must have a table assigned
     if (order.order_type === 'dine_in' && !order.restaurant_table_id) {
       return res.status(400).json({ message: 'Table selection is required for dine-in orders.' });
     }
-    
+
     // VALIDATION 2: Check if the selected table is available (for dine-in orders)
     if (order.order_type === 'dine_in' && order.restaurant_table_id) {
       const tableCheck = await client.query(
         "SELECT status FROM restaurant_tables WHERE id = $1",
         [order.restaurant_table_id]
       );
-      
+
       if (tableCheck.rows.length === 0) {
         return res.status(404).json({ message: 'Selected table not found.' });
       }
-      
+
       if (tableCheck.rows[0].status !== 'available') {
-        return res.status(400).json({ 
-          message: `Table is not available. Current status: ${tableCheck.rows[0].status}. Please select a different table.` 
+        return res.status(400).json({
+          message: `Table is not available. Current status: ${tableCheck.rows[0].status}. Please select a different table.`
         });
       }
     }
-    
+
     let customerId = null;
     if (order.mobile_number && order.mobile_number.trim()) {
       // If mobile number provided, find or create customer and mark as VERIFIED
@@ -503,17 +510,17 @@ router.post('/', async (req: Request, res: Response) => {
     for (const item of items) {
       // Ensure numeric conversion for integer ID columns
       await client.query(
-        'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5);',
-        [newOrder.id, item.menu_item_id, item.quantity, item.unit_price, item.total_price]
+        'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, total_price, is_complimentary) VALUES ($1, $2, $3, $4, $5, $6);',
+        [newOrder.id, item.menu_item_id, item.quantity, item.unit_price, item.total_price, (item.is_complimentary === true)]
       );
     }
     await client.query('COMMIT');
     const finalOrderResult = await client.query(`
-        SELECT o.*, c.name as customer_name, c.mobile_number,
-               (SELECT json_agg(json_build_object('menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', COALESCE(oi.unit_price, mi.price), 'total_price', oi.total_price)) 
-                FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
-        FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
-    `, [newOrder.id]);
+    SELECT o.*, c.name as customer_name, c.mobile_number,
+         (SELECT json_agg(json_build_object('menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', COALESCE(oi.unit_price, mi.price), 'total_price', oi.total_price, 'is_complimentary', COALESCE(oi.is_complimentary,false))) 
+        FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
+    FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
+  `, [newOrder.id]);
     res.status(201).json({ ...finalOrderResult.rows[0], order_items: finalOrderResult.rows[0].order_items || [] });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -526,71 +533,71 @@ router.post('/', async (req: Request, res: Response) => {
 
 // PUT update an order's items, totals, and notes
 router.put('/:id', async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const { items, subtotal, tax_amount, grand_total, notes } = req.body;
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-        const updatedOrderResult = await client.query(
-            `UPDATE orders 
+  const { id } = req.params;
+  const { items, subtotal, tax_amount, grand_total, notes } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const updatedOrderResult = await client.query(
+      `UPDATE orders 
              SET subtotal = $1, tax_amount = $2, grand_total = $3, notes = $4, updated_at = NOW() 
              WHERE id = $5 RETURNING *`,
-            [subtotal, tax_amount, grand_total, notes, id]
-        );
-        if (updatedOrderResult.rows.length === 0) throw new Error('Order not found');
-        await client.query('DELETE FROM order_items WHERE order_id = $1', [id]);
-        for (const item of items) {
-            await client.query(
-                'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5)',
-                [id, item.menu_item_id, item.quantity, item.unit_price, item.total_price]
-            );
-        }
-        await client.query('COMMIT');
-        const finalOrderResult = await client.query(`
-            SELECT o.*, c.name as customer_name, c.mobile_number,
-                   (SELECT json_agg(json_build_object('menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', oi.unit_price, 'total_price', oi.total_price)) 
-                    FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
-            FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
-        `, [id]);
-        res.json({ ...finalOrderResult.rows[0], order_items: finalOrderResult.rows[0].order_items || [] });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Error updating order:', error);
-        res.status(500).json({ message: 'Failed to update order' });
-    } finally {
-        client.release();
+      [subtotal, tax_amount, grand_total, notes, id]
+    );
+    if (updatedOrderResult.rows.length === 0) throw new Error('Order not found');
+    await client.query('DELETE FROM order_items WHERE order_id = $1', [id]);
+    for (const item of items) {
+      await client.query(
+        'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, total_price, is_complimentary) VALUES ($1, $2, $3, $4, $5, $6)',
+        [id, item.menu_item_id, item.quantity, item.unit_price, item.total_price, (item.is_complimentary === true)]
+      );
     }
+    await client.query('COMMIT');
+    const finalOrderResult = await client.query(`
+      SELECT o.*, c.name as customer_name, c.mobile_number,
+           (SELECT json_agg(json_build_object('menu_item_id', oi.menu_item_id, 'menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', oi.unit_price, 'total_price', oi.total_price, 'is_complimentary', COALESCE(oi.is_complimentary,false))) 
+          FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
+      FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
+    `, [id]);
+    res.json({ ...finalOrderResult.rows[0], order_items: finalOrderResult.rows[0].order_items || [] });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error updating order:', error);
+    res.status(500).json({ message: 'Failed to update order' });
+  } finally {
+    client.release();
+  }
 });
 
 // PUT update an order's status
 router.put('/:id/status', async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const { status } = req.body;
-    if (!['completed', 'cancelled', 'pending'].includes(status)) { return res.status(400).json({ message: 'Invalid status provided.' }); }
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const updatedOrderResult = await client.query('UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *', [status, id]);
-      if (updatedOrderResult.rows.length === 0) throw new Error('Order not found.');
-      if (status === 'completed') {
-        const orderItemsResult = await client.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
-        for (const item of orderItemsResult.rows) {
-          const recipeResult = await client.query('SELECT * FROM recipes WHERE menu_item_id = $1', [item.menu_item_id]);
-          for (const ingredient of recipeResult.rows) {
-            const quantityToDeduct = Number(item.quantity) * Number(ingredient.quantity_used);
-            await client.query('UPDATE inventory SET quantity = quantity - $1 WHERE id = $2', [quantityToDeduct, ingredient.inventory_item_id]);
-          }
+  const { id } = req.params;
+  const { status } = req.body;
+  if (!['completed', 'cancelled', 'pending'].includes(status)) { return res.status(400).json({ message: 'Invalid status provided.' }); }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const updatedOrderResult = await client.query('UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *', [status, id]);
+    if (updatedOrderResult.rows.length === 0) throw new Error('Order not found.');
+    if (status === 'completed') {
+      const orderItemsResult = await client.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
+      for (const item of orderItemsResult.rows) {
+        const recipeResult = await client.query('SELECT * FROM recipes WHERE menu_item_id = $1', [item.menu_item_id]);
+        for (const ingredient of recipeResult.rows) {
+          const quantityToDeduct = Number(item.quantity) * Number(ingredient.quantity_used);
+          await client.query('UPDATE inventory SET quantity = quantity - $1 WHERE id = $2', [quantityToDeduct, ingredient.inventory_item_id]);
         }
       }
-      await client.query('COMMIT');
-      res.json(updatedOrderResult.rows[0]);
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Error updating order status:', error);
-      res.status(500).json({ message: 'Failed to update order status' });
-    } finally {
-      client.release();
     }
+    await client.query('COMMIT');
+    res.json(updatedOrderResult.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error updating order status:', error);
+    res.status(500).json({ message: 'Failed to update order status' });
+  } finally {
+    client.release();
+  }
 });
 
 export default router;

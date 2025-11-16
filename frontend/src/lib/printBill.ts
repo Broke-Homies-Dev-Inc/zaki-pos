@@ -35,6 +35,7 @@ interface RestaurantSettings {
   contact_number: string;
   registration_number?: string;
   print_preview_enabled?: boolean;
+  currency?: string;
 }
 
 export const printBill = async ({ table }: BillData) => {
@@ -64,7 +65,7 @@ export const printBill = async ({ table }: BillData) => {
       contact_number: '',
       print_preview_enabled: true // Default to true
     };
-    
+
     if (settingsResponse.status === 'fulfilled') {
       restaurantSettings = settingsResponse.value.data;
     } else {
@@ -222,32 +223,32 @@ function generateBillHTML(
       <div class="line"></div>
 
       <div style="margin: 15px 0;">
-        ${orderDetails.order_items && orderDetails.order_items.length > 0 ? 
-          orderDetails.order_items.map(item => `
+        ${orderDetails.order_items && orderDetails.order_items.length > 0 ?
+      orderDetails.order_items.map(item => `
             <div class="item-row">
               <div class="item-name">${item.menu_item_name}</div>
               <div class="item-details">
-                <span>${item.quantity} x ${formatCurrency(item.unit_price)}</span>
-                <span>${formatCurrency(item.total_price)}</span>
+                <span>${item.quantity} x ${formatCurrency(item.unit_price, restaurantSettings.currency || 'OMR')}</span>
+                <span>${formatCurrency(item.total_price, restaurantSettings.currency || 'OMR')}</span>
               </div>
             </div>
-          `).join('') 
-          : '<div class="center">No items</div>'
-        }
+          `).join('')
+      : '<div class="center">No items</div>'
+    }
       </div>
 
       <div class="total-section">
         <div class="row">
           <span>Subtotal:</span>
-          <span>${formatCurrency(orderDetails.subtotal)}</span>
+          <span>${formatCurrency(orderDetails.subtotal, restaurantSettings.currency || 'OMR')}</span>
         </div>
         <div class="row">
           <span>Tax:</span>
-          <span>${formatCurrency(orderDetails.tax_amount)}</span>
+          <span>${formatCurrency(orderDetails.tax_amount, restaurantSettings.currency || 'OMR')}</span>
         </div>
         <div class="row total-row">
           <span>TOTAL:</span>
-          <span>${formatCurrency(orderDetails.grand_total)}</span>
+          <span>${formatCurrency(orderDetails.grand_total, restaurantSettings.currency || 'OMR')}</span>
         </div>
       </div>
 

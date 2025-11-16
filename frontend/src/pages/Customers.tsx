@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Users, Phone, Calendar, Award, TrendingUp } from "lucide-react";
 import api from "../lib/api";
+import { useRestaurantSettingsContext } from "../contexts/useRestaurantSettingsContext";
+import { formatCurrency } from "../lib/utils";
 
 interface Customer {
     id: number;
@@ -29,6 +31,7 @@ export function Customers() {
         null
     );
     const [transactions, setTransactions] = useState<LoyaltyTransaction[]>([]);
+    const { settings } = useRestaurantSettingsContext();
     const [showDetails, setShowDetails] = useState(false);
 
     useEffect(() => {
@@ -391,10 +394,12 @@ export function Customers() {
                                                                 Order Amount
                                                             </div>
                                                             <div className="font-semibold text-gray-900">
-                                                                ₹
-                                                                {parseFloat(
-                                                                    transaction.order_amount
-                                                                ).toFixed(2)}
+                                                                {formatCurrency(
+                                                                    Number(
+                                                                        transaction.order_amount
+                                                                    ),
+                                                                    settings?.currency || "OMR"
+                                                                )}
                                                             </div>
                                                         </div>
                                                     )}

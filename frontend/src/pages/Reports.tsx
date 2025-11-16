@@ -5,6 +5,7 @@ import DatePicker from 'react-datepicker';
 import { useReports, type ReportKey } from '../hooks/useReports';
 import 'react-datepicker/dist/react-datepicker.css';
 import { formatCurrency } from '../lib/utils';
+import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 
 const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'work-period', label: 'Work Period' },
@@ -141,10 +142,12 @@ export function Reports() {
       }
     }
 
+    const { settings } = useRestaurantSettingsContext();
+
     if (typeof value === 'number') {
       // For some numeric columns we want currency; but not all numbers are currency.
       // Keep previous behavior: format as currency (consistent with original code).
-      return formatCurrency(Number(value));
+      return formatCurrency(Number(value), settings?.currency || 'OMR');
     }
 
     if (typeof value === 'object' && value !== null) {

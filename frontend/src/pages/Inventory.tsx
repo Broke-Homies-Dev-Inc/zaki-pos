@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useInventory } from '../hooks/useInventory';
 import { InventoryItemModal } from '../components/InventoryItemModal';
 import { formatCurrency } from '../lib/utils';
+import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 import type { Database } from '../lib/database.types';
 
 type InventoryItem = Database['public']['Tables']['inventory']['Row'];
@@ -29,6 +30,8 @@ export function Inventory() {
       await deleteInventoryItem(id);
     }
   };
+
+  const { settings } = useRestaurantSettingsContext();
 
   return (
     <div>
@@ -68,7 +71,7 @@ export function Inventory() {
                 <tr key={item.id}>
                   <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{item.item_name}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-gray-700">{item.quantity}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-gray-700">{formatCurrency(Number(item.cost))}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-gray-700">{formatCurrency(Number(item.cost), settings?.currency || 'OMR')}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStockStatusBadge(item.quantity, item.low_stock_threshold)}`}>
                       {item.quantity <= item.low_stock_threshold ? 'Low Stock' : 'In Stock'}

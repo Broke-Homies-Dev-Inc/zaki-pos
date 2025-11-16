@@ -12,16 +12,17 @@ import {
 import { Calendar } from "lucide-react";
 import { useRevenueChart, type ChartPeriod } from "../hooks/useRevenueChart";
 import { formatCurrency } from "../lib/utils";
+import { useRestaurantSettingsContext } from "../contexts/useRestaurantSettingsContext";
 
-const CustomTooltip = ({ active, payload }: any) => {
+const CustomTooltip = ({ active, payload, currency }: any) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
                 <p className="text-sm font-semibold text-gray-900 mb-2">
                     {payload[0].payload.date}
                 </p>
-                <p className="text-sm text-blue-600">
-                    Revenue: {formatCurrency(payload[0].value as number)}
+                    <p className="text-sm text-blue-600">
+                    Revenue: {formatCurrency(payload[0].value as number, currency || 'OMR')}
                 </p>
                 <p className="text-sm text-orange-600">
                     Orders: {payload[1].value}
@@ -79,6 +80,7 @@ export function RevenueChart() {
     const totalRevenue = data.reduce((sum, item) => sum + item.revenue, 0);
     const totalOrders = data.reduce((sum, item) => sum + item.orders, 0);
     const avgRevenue = data.length > 0 ? totalRevenue / data.length : 0;
+    const { settings } = useRestaurantSettingsContext();
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-sm">
@@ -181,7 +183,7 @@ export function RevenueChart() {
                             Total Revenue
                         </p>
                         <p className="text-2xl font-bold text-blue-900 mt-1">
-                            {formatCurrency(totalRevenue)}
+                            {formatCurrency(totalRevenue, settings?.currency || 'OMR')}
                         </p>
                     </div>
                     <div className="bg-orange-50 p-4 rounded-lg">
@@ -197,7 +199,7 @@ export function RevenueChart() {
                             Avg Daily Revenue
                         </p>
                         <p className="text-2xl font-bold text-green-900 mt-1">
-                            {formatCurrency(avgRevenue)}
+                            {formatCurrency(avgRevenue, settings?.currency || 'OMR')}
                         </p>
                     </div>
                 </div>
@@ -235,11 +237,9 @@ export function RevenueChart() {
                         <YAxis
                             stroke="#6b7280"
                             style={{ fontSize: "12px" }}
-                            tickFormatter={(value: number) =>
-                                `₹${(value / 1000).toFixed(0)}k`
-                            }
+                            tickFormatter={(value: number) => formatCurrency(value, settings?.currency || 'OMR')}
                         />
-                        <Tooltip content={<CustomTooltip />} />
+                        <Tooltip content={<CustomTooltip currency={settings?.currency || 'OMR'} />} />
                         <Legend
                             wrapperStyle={{ paddingTop: "20px" }}
                             iconType="line"
@@ -251,7 +251,7 @@ export function RevenueChart() {
                             strokeWidth={3}
                             dot={{ fill: "#2563eb", r: 4 }}
                             activeDot={{ r: 6 }}
-                            name="Revenue (₹)"
+                            name={`Revenue (${settings?.currency || 'OMR'})`}
                         />
                         <Line
                             type="monotone"

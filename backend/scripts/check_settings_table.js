@@ -1,6 +1,6 @@
 const { Pool } = require('pg');
 
-const pool = new Pool({ 
+const pool = new Pool({
   connectionString: 'postgresql://postgres:1234@localhost:5432/restaurant_db'
 });
 
@@ -12,11 +12,11 @@ async function checkSettingsTable() {
       SELECT table_name FROM information_schema.tables 
       WHERE table_schema = 'public' AND table_name = 'restaurant_settings'
     `);
-    
+
     if (tableCheck.rows.length === 0) {
       console.log('❌ restaurant_settings table does not exist');
       console.log('Creating restaurant_settings table...');
-      
+
       await client.query(`
         CREATE TABLE restaurant_settings (
           id SERIAL PRIMARY KEY,
@@ -29,21 +29,21 @@ async function checkSettingsTable() {
           updated_at TIMESTAMP DEFAULT NOW()
         );
       `);
-      
+
       console.log('✅ Created restaurant_settings table');
-      
+
       // Insert default settings
       await client.query(`
         INSERT INTO restaurant_settings (restaurant_name, address, contact_number, registration_number, tax_rate)
         VALUES ('My Restaurant', '123 Main Street', '555-0100', '', 0);
       `);
-      
+
       console.log('✅ Inserted default settings');
       return;
     }
-    
+
     console.log('✅ restaurant_settings table exists');
-    
+
     // Check columns
     const columnsCheck = await client.query(`
       SELECT column_name, data_type 
@@ -51,15 +51,15 @@ async function checkSettingsTable() {
       WHERE table_name = 'restaurant_settings' AND table_schema = 'public'
       ORDER BY ordinal_position
     `);
-    
+
     console.log('\nCurrent columns:');
     columnsCheck.rows.forEach(col => {
       console.log(`  - ${col.column_name} (${col.data_type})`);
     });
-    
+
     const columnNames = columnsCheck.rows.map(c => c.column_name);
     const alterStatements = [];
-    
+
     // Check and add missing columns
     if (!columnNames.includes('registration_number')) {
       alterStatements.push("ALTER TABLE restaurant_settings ADD COLUMN registration_number VARCHAR(100) DEFAULT '';");
@@ -73,7 +73,10 @@ async function checkSettingsTable() {
     if (!columnNames.includes('updated_at')) {
       alterStatements.push("ALTER TABLE restaurant_settings ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();");
     }
-    
+    if (!columnNames.includes('currency')) {
+      alterStatements.push("ALTER TABLE restaurant_settings ADD COLUMN currency VARCHAR(10) DEFAULT 'OMR';");
+    }
+
     if (alterStatements.length > 0) {
       console.log('\n🔧 Adding missing columns...');
       for (const stmt of alterStatements) {
@@ -84,7 +87,7 @@ async function checkSettingsTable() {
     } else {
       console.log('\n✅ All required columns exist');
     }
-    
+
     // Show current settings
     const settings = await client.query('SELECT * FROM restaurant_settings LIMIT 1');
     if (settings.rows.length === 0) {
@@ -98,7 +101,7 @@ async function checkSettingsTable() {
       console.log('\nCurrent settings:');
       console.log(settings.rows[0]);
     }
-    
+
   } catch (error) {
     console.error('Error:', error.message);
   } finally {

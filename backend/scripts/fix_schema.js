@@ -16,24 +16,26 @@ const alterStatements = [
   `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT;`,
   `ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now();`,
   `ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT now();`,
-  
+
   // Add missing columns to other tables we saw errors for earlier
   `ALTER TABLE floors ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now();`,
   `ALTER TABLE sections ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now();`,
   `ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT now();`,
   `ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'available' NOT NULL;`,
   `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(10,2);`,
-  
+  `ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'OMR';`,
+  `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_complimentary BOOLEAN DEFAULT FALSE;`,
+
   // Backfill unit_price from menu_items where missing
   `UPDATE order_items oi SET unit_price = mi.price FROM menu_items mi WHERE oi.menu_item_id = mi.id AND (oi.unit_price IS NULL OR oi.unit_price = 0);`,
-  
+
   // Backfill unit_price from total_price/quantity as fallback
   `UPDATE order_items SET unit_price = (total_price / NULLIF(quantity, 0)) WHERE unit_price IS NULL OR unit_price = 0;`,
 ];
 
 (async () => {
   console.log('🔧 Applying schema fixes to match your SQL dump...\n');
-  
+
   for (const statement of alterStatements) {
     try {
       console.log(`Running: ${statement.substring(0, 80)}...`);
@@ -43,7 +45,7 @@ const alterStatements = [
       console.error(`❌ Error: ${err.message}\n`);
     }
   }
-  
+
   console.log('🎉 Schema migration complete!');
   await pool.end();
 })();

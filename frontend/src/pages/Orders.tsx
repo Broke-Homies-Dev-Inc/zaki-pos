@@ -5,6 +5,7 @@ import { useOrders, type OrderWithItems, type OrderTypeFilter } from '../hooks/u
 import { CreateOrderModal } from '../components/CreateOrderModal';
 import { OrderDetailsModal } from '../components/OrderDetailsModal';
 import { formatCurrency, formatOrderType, getStatusBadge } from '../lib/utils';
+import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 import "react-datepicker/dist/react-datepicker.css"; // Import datepicker styles
 
 // --- NEW HELPER COMPONENT to render the information cleanly ---
@@ -36,6 +37,8 @@ export function Orders() {
   const [activeFilter, setActiveFilter] = useState<OrderTypeFilter>('all');
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
+
+  const { settings } = useRestaurantSettingsContext();
 
   useEffect(() => {
     if (selectedDate) {
@@ -130,7 +133,7 @@ export function Orders() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm max-w-xs">
                     <OrderInfo order={order} />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">{formatCurrency(Number(order.grand_total))}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">{formatCurrency(Number(order.grand_total), settings?.currency || 'OMR')}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${getStatusBadge(order.status)}`}>{order.status}</span>
                   </td>

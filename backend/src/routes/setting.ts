@@ -17,7 +17,7 @@ const router = Router();
 router.get('/settings', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
-    const result = await client.query('SELECT id, restaurant_name, address, contact_number, registration_number, tax_rate, loyalty_points_enabled, loyalty_points_per_100, points_value, print_preview_enabled, min_points_to_redeem FROM restaurant_settings LIMIT 1');
+    const result = await client.query('SELECT id, restaurant_name, address, contact_number, registration_number, tax_rate, loyalty_points_enabled, loyalty_points_per_100, points_value, print_preview_enabled, min_points_to_redeem, currency FROM restaurant_settings LIMIT 1');
     if (result.rows.length === 0) {
       return res.json({
         restaurant_name: 'Restaurant Name', address: 'Restaurant Address', contact_number: 'Phone Number',
@@ -47,13 +47,13 @@ router.post('/settings', async (req: Request, res: Response) => {
     let result;
     if (checkResult.rows.length === 0) {
       result = await client.query(
-        'INSERT INTO restaurant_settings (restaurant_name, address, contact_number, registration_number, tax_rate, loyalty_points_enabled, loyalty_points_per_100, points_value, print_preview_enabled, min_points_to_redeem) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
-        [restaurant_name, address, contact_number, registration_number || '', tax_rate || 0, loyalty_points_enabled !== undefined ? loyalty_points_enabled : true, loyalty_points_per_100 || 10, points_value || 0.1, print_preview_enabled !== undefined ? print_preview_enabled : true, min_points_to_redeem || 200]
+        'INSERT INTO restaurant_settings (restaurant_name, address, contact_number, registration_number, tax_rate, loyalty_points_enabled, loyalty_points_per_100, points_value, print_preview_enabled, min_points_to_redeem, currency) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+        [restaurant_name, address, contact_number, registration_number || '', tax_rate || 0, loyalty_points_enabled !== undefined ? loyalty_points_enabled : true, loyalty_points_per_100 || 10, points_value || 0.1, print_preview_enabled !== undefined ? print_preview_enabled : true, min_points_to_redeem || 200, req.body.currency || 'OMR']
       );
     } else {
       result = await client.query(
-        'UPDATE restaurant_settings SET restaurant_name = $1, address = $2, contact_number = $3, registration_number = $4, tax_rate = $5, loyalty_points_enabled = $6, loyalty_points_per_100 = $7, points_value = $8, print_preview_enabled = $9, min_points_to_redeem = $10 WHERE id = $11 RETURNING *',
-        [restaurant_name, address, contact_number, registration_number || '', tax_rate || 0, loyalty_points_enabled !== undefined ? loyalty_points_enabled : true, loyalty_points_per_100 || 10, points_value || 0.1, print_preview_enabled !== undefined ? print_preview_enabled : true, min_points_to_redeem || 200, checkResult.rows[0].id]
+        'UPDATE restaurant_settings SET restaurant_name = $1, address = $2, contact_number = $3, registration_number = $4, tax_rate = $5, loyalty_points_enabled = $6, loyalty_points_per_100 = $7, points_value = $8, print_preview_enabled = $9, min_points_to_redeem = $10, currency = $11 WHERE id = $12 RETURNING *',
+        [restaurant_name, address, contact_number, registration_number || '', tax_rate || 0, loyalty_points_enabled !== undefined ? loyalty_points_enabled : true, loyalty_points_per_100 || 10, points_value || 0.1, print_preview_enabled !== undefined ? print_preview_enabled : true, min_points_to_redeem || 200, req.body.currency || 'OMR', checkResult.rows[0].id]
       );
     }
     res.json(result.rows[0]);
@@ -67,11 +67,11 @@ router.post('/settings', async (req: Request, res: Response) => {
 
 // GET all layout data
 router.get('/layout', async (req: Request, res: Response) => {
-    const client = await pool.connect();
-    try {
-      const floorsResult = await client.query('SELECT id as floor_id, name as floor_name FROM floors ORDER BY name');
-      const sectionsResult = await client.query('SELECT id as section_id, name as section_name, floor_id FROM sections ORDER BY name');
-      const tablesResult = await client.query(`
+  const client = await pool.connect();
+  try {
+    const floorsResult = await client.query('SELECT id as floor_id, name as floor_name FROM floors ORDER BY name');
+    const sectionsResult = await client.query('SELECT id as section_id, name as section_name, floor_id FROM sections ORDER BY name');
+    const tablesResult = await client.query(`
           SELECT 
               rt.id AS table_id, rt.section_id, rt.name AS table_name, rt.status AS table_status,
               o.id AS active_order_id, o.order_number AS active_order_number, o.grand_total AS active_order_grand_total,
@@ -85,34 +85,34 @@ router.get('/layout', async (req: Request, res: Response) => {
           LEFT JOIN customers c ON o.customer_id = c.id
           ORDER BY rt.name;
       `);
-      const layout = floorsResult.rows.map(floor => ({
-          ...floor,
-          sections: sectionsResult.rows.filter(s => s.floor_id === floor.floor_id).map(section => ({
-              ...section,
-              tables: tablesResult.rows.filter(t => t.section_id === section.section_id).map(table => {
-                  let actualStatus = table.table_status || 'available';
-                  if (!table.active_order_id && (actualStatus === 'occupied' || actualStatus === 'bill_printed')) {
-                      actualStatus = 'available';
-                  }
-                  return {
-                      table_id: table.table_id, table_name: table.table_name, table_status: actualStatus,
-                      active_order: table.active_order_id ? {
-                          order_id: table.active_order_id, order_number: table.active_order_number,
-                          grand_total: parseFloat(table.active_order_grand_total),
-                          status: table.active_order_status, created_at: table.active_order_created_at,
-                          customer_id: table.active_order_customer_id, customer_mobile: table.active_order_customer_mobile
-                      } : null
-                  };
-              })
-          }))
-      }));
-      res.json(layout);
-    } catch (error) {
-        console.error('---!!! ERROR Fetching Layout !!!---:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
-    } finally {
-        client.release();
-    }
+    const layout = floorsResult.rows.map(floor => ({
+      ...floor,
+      sections: sectionsResult.rows.filter(s => s.floor_id === floor.floor_id).map(section => ({
+        ...section,
+        tables: tablesResult.rows.filter(t => t.section_id === section.section_id).map(table => {
+          let actualStatus = table.table_status || 'available';
+          if (!table.active_order_id && (actualStatus === 'occupied' || actualStatus === 'bill_printed')) {
+            actualStatus = 'available';
+          }
+          return {
+            table_id: table.table_id, table_name: table.table_name, table_status: actualStatus,
+            active_order: table.active_order_id ? {
+              order_id: table.active_order_id, order_number: table.active_order_number,
+              grand_total: parseFloat(table.active_order_grand_total),
+              status: table.active_order_status, created_at: table.active_order_created_at,
+              customer_id: table.active_order_customer_id, customer_mobile: table.active_order_customer_mobile
+            } : null
+          };
+        })
+      }))
+    }));
+    res.json(layout);
+  } catch (error) {
+    console.error('---!!! ERROR Fetching Layout !!!---:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  } finally {
+    client.release();
+  }
 });
 
 // ... (POST /floors, /sections, /tables... UNCHANGED) ...
@@ -151,14 +151,14 @@ router.put('/tables/:id/status', async (req: Request, res: Response) => {
   const { status } = req.body;
   const client = await pool.connect();
   try {
-      const result = await client.query('UPDATE restaurant_tables SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *;', [status, id]);
-      if (result.rows.length === 0) { return res.status(404).json({ message: 'Table not found' }); }
-      res.json(result.rows[0]);
+    const result = await client.query('UPDATE restaurant_tables SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *;', [status, id]);
+    if (result.rows.length === 0) { return res.status(404).json({ message: 'Table not found' }); }
+    res.json(result.rows[0]);
   } catch (error) {
-      console.error('Error updating table status:', error);
-      res.status(500).json({ message: 'Failed to update table status' });
+    console.error('Error updating table status:', error);
+    res.status(500).json({ message: 'Failed to update table status' });
   } finally {
-      client.release();
+    client.release();
   }
 });
 
@@ -171,21 +171,21 @@ type Payment = {
 
 router.put('/orders/:orderId/complete', async (req: Request, res: Response) => {
   const { orderId } = req.params;
-  const { 
-    tableId, 
-    status, 
-    pointsRedeemed = 0, 
+  const {
+    tableId,
+    status,
+    pointsRedeemed = 0,
     finalAmount, // This is the post-loyalty amount
     customerId,
     // --- NEW: Now accepts an array of payments ---
-    payments 
-  } = req.body as { 
-    tableId: string; 
-    status: string; 
-    pointsRedeemed: number; 
-    finalAmount: number; 
+    payments
+  } = req.body as {
+    tableId: string;
+    status: string;
+    pointsRedeemed: number;
+    finalAmount: number;
     customerId: string | null;
-    payments: Payment[] 
+    payments: Payment[]
   };
 
   // --- NEW: Validation ---
@@ -196,15 +196,15 @@ router.put('/orders/:orderId/complete', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     // --- 1. Update Order (Unchanged) ---
     const orderUpdateResult = await client.query('UPDATE orders SET status = $1, updated_at = NOW(), points_redeemed = $2 WHERE id = $3 RETURNING *;', [status, pointsRedeemed, orderId]);
     if (orderUpdateResult.rows.length === 0) throw new Error('Order not found');
     const order = orderUpdateResult.rows[0];
-    
+
     // --- 2. Run all 'completed' logic ---
     if (status === 'completed') {
-      
+
       // --- 2a. Inventory Logic (Unchanged) ---
       const orderItemsResult = await client.query('SELECT * FROM order_items WHERE order_id = $1', [orderId]);
       for (const item of orderItemsResult.rows) {
@@ -214,14 +214,14 @@ router.put('/orders/:orderId/complete', async (req: Request, res: Response) => {
           await client.query('UPDATE inventory SET quantity = quantity - $1 WHERE id = $2', [quantityToDeduct, ingredient.inventory_item_id]);
         }
       }
-      
+
       // --- 2b. Loyalty Logic (Unchanged) ---
       const custId = customerId || order.customer_id;
       if (custId) {
         const settingsResult = await client.query('SELECT loyalty_points_enabled, loyalty_points_per_100, points_value, min_points_to_redeem FROM restaurant_settings LIMIT 1');
         if (settingsResult.rows.length > 0) {
           const { loyalty_points_enabled, loyalty_points_per_100, points_value, min_points_to_redeem } = settingsResult.rows[0];
-          
+
           if (loyalty_points_enabled) {
             // REDEEM
             if (pointsRedeemed > 0) {
@@ -229,7 +229,7 @@ router.put('/orders/:orderId/complete', async (req: Request, res: Response) => {
               const pointsValueAmount = pointsRedeemed * (parseFloat(points_value) || 0.1);
               await client.query(
                 'INSERT INTO loyalty_transactions (customer_id, order_id, points_redeemed, transaction_type, description, order_amount) VALUES ($1, $2, $3, $4, $5, $6)',
-                [custId, orderId, pointsRedeemed, 'redeemed', `Redeemed ${pointsRedeemed} points (₹${pointsValueAmount.toFixed(2)}) for order`, order.grand_total]
+                [custId, orderId, pointsRedeemed, 'redeemed', `Redeemed ${pointsRedeemed} points (OMR${pointsValueAmount.toFixed(2)}) for order`, order.grand_total]
               );
             }
             // EARN
@@ -240,7 +240,7 @@ router.put('/orders/:orderId/complete', async (req: Request, res: Response) => {
                 await client.query('UPDATE customers SET loyalty_points = loyalty_points + $1 WHERE id = $2', [pointsEarned, custId]);
                 await client.query(
                   'INSERT INTO loyalty_transactions (customer_id, order_id, points_earned, transaction_type, description, order_amount) VALUES ($1, $2, $3, $4, $5, $6)',
-                  [custId, orderId, pointsEarned, 'earned', `Earned ${pointsEarned} points from order (paid: ₹${amountForPoints.toFixed(2)})`, amountForPoints]
+                  [custId, orderId, pointsEarned, 'earned', `Earned ${pointsEarned} points from order (paid: OMR${amountForPoints.toFixed(2)})`, amountForPoints]
                 );
               }
             }
@@ -259,7 +259,7 @@ router.put('/orders/:orderId/complete', async (req: Request, res: Response) => {
           changeForThisPayment = totalChangeDue;
           totalChangeDue = 0; // Ensure change is only given once
         }
-        
+
         await client.query(
           `INSERT INTO bills (order_id, customer_id, bill_number, payment_method, amount_paid, change_due)
            VALUES ($1, $2, $3, $4, $5, $6);`,
@@ -286,11 +286,11 @@ router.put('/orders/:orderId/complete', async (req: Request, res: Response) => {
 
     await client.query('COMMIT');
     const finalOrderResult = await client.query(`
-        SELECT o.*, c.name as customer_name, c.mobile_number,
-               (SELECT json_agg(json_build_object('menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', oi.unit_price, 'total_price', oi.total_price)) 
-                FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
-        FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
-    `, [orderId]);
+    SELECT o.*, c.name as customer_name, c.mobile_number,
+         (SELECT json_agg(json_build_object('menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', oi.unit_price, 'total_price', oi.total_price, 'is_complimentary', COALESCE(oi.is_complimentary,false))) 
+        FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
+    FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
+  `, [orderId]);
     res.json({ ...finalOrderResult.rows[0], order_items: finalOrderResult.rows[0].order_items || [] });
   } catch (error) {
     await client.query('ROLLBACK');

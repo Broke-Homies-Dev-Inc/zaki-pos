@@ -11,7 +11,7 @@ router.get('/', async (req: Request, res: Response) => {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
@@ -75,7 +75,7 @@ router.get('/', async (req: Request, res: Response) => {
     // Calculate percentage changes
     const todayRevenue = parseFloat(todayRevenueResult.rows[0].revenue);
     const yesterdayRevenue = parseFloat(yesterdayRevenueResult.rows[0].revenue);
-    
+
     let revenueChange: string;
     if (yesterdayRevenue === 0) {
       if (todayRevenue > 0) {
@@ -91,7 +91,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const todayOrders = parseInt(todayOrdersResult.rows[0].count);
     const yesterdayOrders = parseInt(yesterdayOrdersResult.rows[0].count);
-    
+
     let ordersChange: string;
     if (yesterdayOrders === 0) {
       if (todayOrders > 0) {
@@ -129,10 +129,10 @@ router.get('/revenue-chart', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     const { period, startDate, endDate } = req.query;
-    
+
     let query = '';
     let params: any[] = [];
-    
+
     if (period === 'weekly') {
       // Last 7 days
       query = `
@@ -164,7 +164,7 @@ router.get('/revenue-chart', async (req: Request, res: Response) => {
       const start = new Date(startDate as string);
       const end = new Date(endDate as string);
       end.setHours(23, 59, 59, 999);
-      
+
       query = `
         SELECT 
           DATE(created_at) as date,
@@ -182,7 +182,7 @@ router.get('/revenue-chart', async (req: Request, res: Response) => {
     }
 
     const result = await client.query(query, params);
-    
+
     // Format the data
     const chartData = result.rows.map(row => ({
       date: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),

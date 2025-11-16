@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenuItems';
 import { MenuItemModal } from '../components/MenuItemModal';
 import { formatCurrency } from '../lib/utils';
+import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 import type { Database } from '../lib/database.types';
 
 type MenuItem = Database['public']['Tables']['menu_items']['Row'];
@@ -34,6 +35,8 @@ export function Menu() { // <--- The 'export' keyword is here
       await deleteMenuItem(id);
     }
   };
+
+  const { settings } = useRestaurantSettingsContext();
 
   return (
     <div>
@@ -77,7 +80,7 @@ export function Menu() { // <--- The 'export' keyword is here
                   <tr key={item.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right font-medium">{formatCurrency(item.price)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right font-medium">{formatCurrency(item.price, settings?.currency || 'OMR')}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input

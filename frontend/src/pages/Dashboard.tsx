@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { CreateOrderModal } from "../components/CreateOrderModal";
 import { RevenueChart } from "../components/RevenueChart";
 import { useDashboard } from "../hooks/useDashboard";
+import { useRestaurantSettingsContext } from "../contexts/useRestaurantSettingsContext";
 import { formatCurrency } from "../lib/utils";
 
 // The StatCard component remains the same
@@ -44,6 +45,7 @@ const StatCard = ({
 export function Dashboard() {
     const [isCreateOrderModalOpen, setCreateOrderModalOpen] = useState(false);
     const { stats, loading, error } = useDashboard();
+    const { settings } = useRestaurantSettingsContext();
 
     if (loading) {
         return (
@@ -69,7 +71,7 @@ export function Dashboard() {
     const statsData = [
         {
             title: "Today's Revenue",
-            value: formatCurrency(stats.todayRevenue),
+            value: formatCurrency(stats.todayRevenue, settings?.currency || 'OMR'),
             icon: IndianRupee,
             change: stats.revenueChange,
             color: "blue",
