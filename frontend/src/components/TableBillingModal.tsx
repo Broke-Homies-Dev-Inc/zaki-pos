@@ -1,4 +1,4 @@
-import { X, Printer, CheckCircle, Ban, Info, Gift, Trash2, Plus, Minus } from "lucide-react";
+import { X, Printer, CheckCircle, Ban, Info, Gift, Trash2, Plus, Minus, IndianRupee, CreditCard, Smartphone, BookUser } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { RestaurantTable } from "../hooks/useSettings";
 import { useOrders } from "../hooks/useOrders";
@@ -7,7 +7,7 @@ import { useRestaurantSettings } from "../hooks/useRestaurantSettings";
 import { formatCurrency, formatDateTime } from "../lib/utils";
 import { printBill } from "../lib/printBill";
 import api from "../lib/api";
-import { PaymentModal } from "./PaymentModal"; // 1. Import the PaymentModal
+// Payment UI will be rendered inline; do not import `PaymentModal`.
 
 interface TableBillingModalProps {
     table: RestaurantTable;
@@ -29,6 +29,94 @@ export function TableBillingModal({ table, onClose }: TableBillingModalProps) {
 
     // 2. Add state to control the new Payment Modal
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    // When true (after printing) show payment UI and hide the Print button
+    const [printedAndShowPayment, setPrintedAndShowPayment] = useState(false);
+
+    // Payment state (inlined from PaymentModal)
+    type PaymentMethod = 'cash' | 'card' | 'due' | 'other';
+    type Payment = { method: PaymentMethod; amount: number };
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [isSplit, setIsSplit] = useState(false);
+    const [splitPayments, setSplitPayments] = useState<Payment[]>([]);
+    const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cash');
+    const [simpleAmountPaid, setSimpleAmountPaid] = useState(() => String(activeOrder?.grand_total || 0));
+    const totalPaid = splitPayments.reduce((sum, p) => sum + p.amount, 0);
+    const [amountToAdd, setAmountToAdd] = useState('0');
+
+    const paymentMethods = [
+        { name: 'Cash', value: 'cash', icon: IndianRupee },
+        { name: 'Card', value: 'card', icon: CreditCard },
+        { name: 'Due', value: 'due', icon: BookUser },
+        { name: 'Other', value: 'other', icon: Smartphone },
+    ] as const;
+
+    const handleAddPayment = () => {
+        const amount = parseFloat(amountToAdd);
+        if (isNaN(amount) || amount <= 0) {
+            setError('Please enter a valid amount');
+            return;
+        }
+        setSplitPayments([...splitPayments, { method: selectedMethod, amount }]);
+    };
+
+    const handleRemovePayment = (index: number) => {
+        setSplitPayments(splitPayments.filter((_, i) => i !== index));
+    };
+
+    const handleSettle = async () => {
+        if (!activeOrder) return;
+        setError(null);
+        setIsSubmitting(true);
+
+        let payments: Payment[] = [];
+        if (isSplit) {
+            if (splitPayments.length === 0) {
+                setError('Please add at least one payment.');
+                setIsSubmitting(false);
+                return;
+            }
+            const currentFinal = (typeof finalAmountToPay !== 'undefined') ? finalAmountToPay : (activeOrder?.grand_total || 0);
+            const currentAmountRemaining = currentFinal - totalPaid;
+            if (currentAmountRemaining > 0.01) {
+                setError('There is still an amount remaining to be paid.');
+                setIsSubmitting(false);
+                return;
+            }
+            payments = splitPayments;
+        } else {
+            const amount = parseFloat(simpleAmountPaid);
+            if (isNaN(amount)) {
+                setError('Please enter a valid amount.');
+                setIsSubmitting(false);
+                return;
+            }
+            if (amount < finalAmountToPay && selectedMethod === 'cash') {
+                setError('Cash paid cannot be less than the total due.');
+                setIsSubmitting(false);
+                return;
+            }
+            payments = [{ method: selectedMethod, amount }];
+        }
+
+        try {
+            await api.put(`/setting/orders/${activeOrder.order_id}/complete`, {
+                tableId: table.table_id,
+                status: 'completed',
+                pointsRedeemed: pointsToRedeem,
+                finalAmount: finalAmountToPay,
+                customerId: customerData?.id || null,
+                payments,
+            });
+
+            onPaymentSuccess();
+        } catch (err) {
+            console.error('Failed to settle payment:', err);
+            setError('Failed to settle payment. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     // State for full order details
     const [fullOrderDetails, setFullOrderDetails] = useState<any>(null);
@@ -113,12 +201,27 @@ export function TableBillingModal({ table, onClose }: TableBillingModalProps) {
     const amountAfterRedemption = Math.max(0, billAmount - pointsValue);
     const finalAmountToPay = usePoints ? amountAfterRedemption : billAmount;
 
+    // Compute derived payment values now that `finalAmountToPay` is known
+    const amountRemaining = finalAmountToPay - totalPaid;
+    useEffect(() => {
+        setAmountToAdd(String(amountRemaining || 0));
+    }, [amountRemaining]);
+
+    const balance = isSplit ? totalPaid - finalAmountToPay : (parseFloat(simpleAmountPaid || '0') - finalAmountToPay);
+    const canSettle = isSplit ? amountRemaining <= 0.01 : (selectedMethod === 'cash' ? balance >= -0.01 : true);
+
 
     const handlePrintBill = async () => {
         if (!activeOrder) return;
-        printBill({ table });
-        await updateTableStatus(table.table_id, "bill_printed");
-        onClose();
+        try {
+            printBill({ table });
+            await updateTableStatus(table.table_id, "bill_printed");
+            // Instead of closing, show the payment UI and remove the Print button
+            setPrintedAndShowPayment(true);
+            setIsPaymentModalOpen(true);
+        } catch (err) {
+            console.error('Error printing bill:', err);
+        }
     };
 
     // Quick Pay handler - instantly complete payment with cash
@@ -270,20 +373,7 @@ export function TableBillingModal({ table, onClose }: TableBillingModalProps) {
         }
     };
 
-    // 5. Conditionally render the PaymentModal and pass props
-    if (isPaymentModalOpen && activeOrder) {
-        return (
-            <PaymentModal
-                table={table}
-                // Pass all the calculated data to the payment modal
-                finalAmountToPay={finalAmountToPay}
-                pointsToRedeem={usePoints ? pointsToRedeem : 0}
-                customerData={customerData ? { id: customerData.id } : null}
-                onClose={() => setIsPaymentModalOpen(false)}
-                onPaymentSuccess={onPaymentSuccess}
-            />
-        );
-    }
+    // Payment UI will be rendered inline in the right panel when `isPaymentModalOpen` is true.
 
     // This is your existing modal UI
     return (
@@ -314,23 +404,12 @@ export function TableBillingModal({ table, onClose }: TableBillingModalProps) {
                     ) : (
                         <>
                             {/* Left Side - Order Details (Scrollable) */}
-                            <div className="flex-1 overflow-y-auto p-6 border-r border-gray-200">
-                                <div className="space-y-4">
-                                    <p className="text-gray-700">
-                                        Order Number:{" "}
-                                        <span className="font-medium">
-                                            {activeOrder.order_number}
-                                        </span>
-                                    </p>
-                                    <p className="text-gray-700">
-                                        Order Placed:{" "}
-                                        <span className="font-medium">
-                                            {formatDateTime(activeOrder.created_at)}
-                                        </span>
-                                    </p>
+                            <div className="flex-1 max-w-3xl p-6 border-r border-gray-200 flex flex-col min-h-0">
+                                <div className="space-y-4 flex-1 flex flex-col min-h-0">
+                                    {/* Order number and date removed as requested */}
 
-                                    {/* Order Items Section */}
-                                    <div className="border-t pt-4">
+                                    {/* Order Items Section (scrollable) */}
+                                    <div className="border-t pt-4 flex-1 overflow-y-auto hide-scrollbar">
                                         <h3 className="font-semibold text-lg mb-3">
                                             Order Items
                                         </h3>
@@ -339,7 +418,7 @@ export function TableBillingModal({ table, onClose }: TableBillingModalProps) {
                                                 Loading order details...
                                             </div>
                                         ) : (
-                                            <div className="space-y-2">
+                                            <div className="space-y-2 p-1">
                                                 {fullOrderDetails?.order_items && fullOrderDetails.order_items.length > 0 ? (
                                                     fullOrderDetails.order_items.map((item: any, index: number) => (
                                                         <div
@@ -436,6 +515,7 @@ export function TableBillingModal({ table, onClose }: TableBillingModalProps) {
                                         )}
                                     </div>
 
+                                    {/* Order Summary (fixed) */}
                                     <div className="border-t pt-4">
                                         <h3 className="font-semibold text-lg mb-2">
                                             Order Summary
@@ -573,52 +653,204 @@ export function TableBillingModal({ table, onClose }: TableBillingModalProps) {
                             </div>
 
                             {/* Right Side - Action Buttons (Fixed) */}
-                            <div className="w-80 flex flex-col justify-center p-6 bg-gray-50">
-                                <div className="space-y-3">
-                                    {/* Print Bill Button */}
-                                    <button
-                                        onClick={handlePrintBill}
-                                        disabled={table.table_status === "paid"}
-                                        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-                                    >
-                                        <Printer size={20} /> Print Bill
-                                    </button>
-                                    
-                                    {/* Quick Pay Button */}
-                                    <button
-                                        onClick={handleQuickPay}
-                                        disabled={
-                                            table.table_status === "paid" || loading || loadingOrderDetails
-                                        }
-                                        className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-purple-700 disabled:bg-gray-400 transition-colors"
-                                    >
-                                        <CheckCircle size={20} />
-                                        {loading || loadingOrderDetails
-                                            ? "Loading..."
-                                            : `Quick Pay (Cash)`}
-                                    </button>
+                            <div className={`w-96 flex flex-col ${isPaymentModalOpen ? 'justify-start' : 'justify-center'} items-stretch p-6 bg-gray-50`}>
 
-                                    {/* Complete Payment Button */}
-                                    <button
-                                        onClick={handleOpenPaymentModal}
-                                        disabled={
-                                            table.table_status === "paid" || loading || loadingOrderDetails
-                                        }
-                                        className="w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-green-700 disabled:bg-gray-400 transition-colors"
-                                    >
-                                        <CheckCircle size={20} />
-                                        Complete Payment
-                                    </button>
+                                {/* Inline Payment Panel (shows when isPaymentModalOpen) */}
+                                {isPaymentModalOpen && activeOrder && (
+                                    <div className="bg-white rounded-xl shadow p-4 mb-4 flex flex-col flex-1">
+                                        {/* header removed: no label or close button as requested */}
 
-                                    {/* Cancel Order Button */}
-                                    <button
-                                        onClick={handleCancelOrder}
-                                        disabled={table.table_status === "paid"}
-                                        className="w-full px-4 py-3 bg-red-500 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-red-600 disabled:bg-gray-400 transition-colors"
-                                    >
-                                        <Ban size={20} /> Cancel Order
-                                    </button>
-                                </div>
+                                        <div className="p-3 space-y-3 flex-1 overflow-y-auto hide-scrollbar">
+                                            <div className="bg-gray-50 p-3 rounded-lg text-center">
+                                                <label className="text-sm font-medium text-gray-600">Total Amount Due</label>
+                                                <p className="text-2xl font-bold text-blue-600">{formatCurrency(finalAmountToPay, settings?.currency || 'OMR')}</p>
+                                                {pointsToRedeem > 0 && (
+                                                    <p className="text-xs text-green-600">(After {formatCurrency(activeOrder.grand_total - finalAmountToPay, settings?.currency || 'OMR')} discount)</p>
+                                                )}
+                                            </div>
+
+                                            {isSplit ? (
+                                                <div className="space-y-3">
+                                                    <div className="space-y-2">
+                                                        {splitPayments.map((p, i) => (
+                                                            <div key={i} className="flex justify-between items-center bg-gray-100 p-2 rounded-md">
+                                                                <span className="font-medium capitalize">{p.method}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-gray-800">{formatCurrency(p.amount, settings?.currency || 'OMR')}</span>
+                                                                    <button onClick={() => handleRemovePayment(i)} className="text-red-500 hover:text-red-700">
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    {amountRemaining > 0.01 && (
+                                                        <div className="bg-yellow-50 border border-yellow-200 p-2 rounded-lg text-center">
+                                                            <label className="text-sm font-medium text-yellow-800">Amount Remaining</label>
+                                                            <p className="text-lg font-bold text-yellow-900">{formatCurrency(amountRemaining, settings?.currency || 'OMR')}</p>
+                                                        </div>
+                                                    )}
+
+                                                    {amountRemaining > 0.01 && (
+                                                        <div className="space-y-2 p-2 border rounded-lg">
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div>
+                                                                    <label className="block text-xs font-medium text-gray-700">Amount to Add</label>
+                                                                    <input type="number" value={amountToAdd} onChange={(e) => setAmountToAdd(e.target.value)} className="w-full px-2 py-1 border rounded-md text-sm" />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-xs font-medium text-gray-700">Method</label>
+                                                                    <select value={selectedMethod} onChange={(e) => setSelectedMethod(e.target.value as PaymentMethod)} className="w-full px-2 py-1 border rounded-md text-sm bg-white">
+                                                                        {paymentMethods.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                            <button onClick={handleAddPayment} className="w-full px-3 py-2 bg-blue-500 text-white rounded font-semibold text-sm">Add Payment</button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-700">Amount Paid</label>
+                                                            <input type="number" value={simpleAmountPaid} onChange={(e) => setSimpleAmountPaid(e.target.value)} className="w-full px-2 py-1 border rounded-md text-sm" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-700">Balance (Change)</label>
+                                                            <input type="text" readOnly value={formatCurrency(balance, settings?.currency || 'OMR')} className={`w-full px-2 py-1 border rounded-md bg-gray-100 text-sm ${balance < 0 ? 'text-red-600' : 'text-green-600'}`} />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Payment Method</label>
+                                                        <div className="grid grid-cols-4 gap-2">
+                                                            {paymentMethods.map(({ name, value, icon: Icon }) => (
+                                                                <button key={value} onClick={() => setSelectedMethod(value)} className={`p-2 border rounded flex flex-col items-center justify-center text-xs ${selectedMethod === value ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}>
+                                                                    <Icon size={16} className="mb-1" />
+                                                                    <span className="text-xs font-semibold">{name}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+                                        </div>
+
+                                        <div className="p-2 bg-gray-50 border-t flex items-stretch gap-2">
+                                            <button
+                                                onClick={() => setIsSplit(!isSplit)}
+                                                className={`flex-1 px-4 py-2 rounded font-semibold text-sm text-center ${isSplit ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-700'}`}
+                                            >
+                                                {isSplit ? 'Single Payment' : 'Split'}
+                                            </button>
+
+                                            <button
+                                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded font-semibold text-sm opacity-50 cursor-not-allowed text-center"
+                                            >
+                                                Complement
+                                            </button>
+
+                                            <button
+                                                onClick={handleSettle}
+                                                disabled={isSubmitting || !canSettle}
+                                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded font-semibold text-sm disabled:bg-gray-400 text-center"
+                                            >
+                                                {isSubmitting ? 'Processing...' : 'Settle'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {isPaymentModalOpen ? (
+                                    <div className="flex justify-center gap-2 items-center">
+                                        {/* Print (compact) - hidden after printing */}
+                                        {!printedAndShowPayment && (
+                                            <button
+                                                onClick={handlePrintBill}
+                                                disabled={table.table_status === "paid"}
+                                                className="w-32 px-2 py-2 bg-blue-600 text-white rounded font-semibold flex items-center justify-center gap-2 text-sm hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                                            >
+                                                <Printer size={16} />
+                                                Print
+                                            </button>
+                                        )}
+
+                                        {/* Quick Pay (compact) */}
+                                        <button
+                                            onClick={handleQuickPay}
+                                            disabled={
+                                                table.table_status === "paid" || loading || loadingOrderDetails
+                                            }
+                                            className="w-32 px-2 py-2 bg-purple-600 text-white rounded font-semibold flex items-center justify-center gap-2 text-sm hover:bg-purple-700 disabled:bg-gray-400 transition-colors"
+                                        >
+                                            <CheckCircle size={16} />
+                                            Quick Pay
+                                        </button>
+
+                                        {/* Cancel (compact) */}
+                                        <button
+                                            onClick={handleCancelOrder}
+                                            disabled={table.table_status === "paid"}
+                                            className="w-32 px-2 py-2 bg-red-500 text-white rounded font-semibold flex items-center justify-center gap-2 text-sm hover:bg-red-600 disabled:bg-gray-400 transition-colors"
+                                        >
+                                            <Ban size={16} />
+                                            Cancel
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {/* Print Bill Button (hidden after printing) */}
+                                        {!printedAndShowPayment && (
+                                            <button
+                                                onClick={handlePrintBill}
+                                                disabled={table.table_status === "paid"}
+                                                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                                            >
+                                                <Printer size={20} /> Print Bill
+                                            </button>
+                                        )}
+                                        
+                                        {/* Quick Pay Button */}
+                                        <button
+                                            onClick={handleQuickPay}
+                                            disabled={
+                                                table.table_status === "paid" || loading || loadingOrderDetails
+                                            }
+                                            className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-purple-700 disabled:bg-gray-400 transition-colors"
+                                        >
+                                            <CheckCircle size={20} />
+                                            {loading || loadingOrderDetails
+                                                ? "Loading..."
+                                                : `Quick Pay (Cash)`}
+                                        </button>
+
+                                        {/* Complete Payment Button (hidden while payment UI is visible) */}
+                                        {!isPaymentModalOpen && (
+                                        <button
+                                            onClick={handleOpenPaymentModal}
+                                            disabled={
+                                                table.table_status === "paid" || loading || loadingOrderDetails
+                                            }
+                                            className="w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-green-700 disabled:bg-gray-400 transition-colors"
+                                        >
+                                            <CheckCircle size={20} />
+                                            Complete Payment
+                                        </button>
+                                        )}
+
+                                        {/* Cancel Order Button */}
+                                        <button
+                                            onClick={handleCancelOrder}
+                                            disabled={table.table_status === "paid"}
+                                            className="w-full px-4 py-3 bg-red-500 text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-red-600 disabled:bg-gray-400 transition-colors"
+                                        >
+                                            <Ban size={20} /> Cancel Order
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </>
                     )}
