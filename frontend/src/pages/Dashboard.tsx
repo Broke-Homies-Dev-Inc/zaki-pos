@@ -1,4 +1,4 @@
-import { IndianRupee, ShoppingCart, Users, Package, Plus } from "lucide-react";
+import { Banknote, ShoppingCart, Users, Package, Plus } from "lucide-react";
 import React, { useState } from "react";
 import { CreateOrderModal } from "../components/CreateOrderModal";
 import { RevenueChart } from "../components/RevenueChart";
@@ -72,7 +72,7 @@ export function Dashboard() {
         {
             title: "Today's Revenue",
             value: formatCurrency(stats.todayRevenue, settings?.currency || 'OMR'),
-            icon: IndianRupee,
+            icon: Banknote,
             change: stats.revenueChange,
             color: "blue",
         },

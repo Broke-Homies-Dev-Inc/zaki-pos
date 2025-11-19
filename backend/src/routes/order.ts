@@ -1,3 +1,4 @@
+// backend/src/routes/order.ts
 import { Router, Request, Response } from 'express';
 import { pool } from '../server';
 import * as htmlPdf from 'html-pdf-node';
@@ -19,28 +20,41 @@ router.get('/', async (req: Request, res: Response) => {
       LEFT JOIN sections s ON rt.section_id = s.id
       LEFT JOIN floors f ON s.floor_id = f.id
     `;
-    const params = [];
-    const whereClauses = [];
-    let paramIndex = 1;
+    const params: any[] = [];
+    const whereClauses: string[] = [];
+
+    // Expect date as "YYYY-MM-DD" (local calendar date from client)
+    // Compare using server timezone: convert created_at to server timezone date and match
     if (date && typeof date === 'string') {
-      whereClauses.push(`o.created_at >= $${paramIndex}::date AND o.created_at < ($${paramIndex}::date + '1 day'::interval)`);
+      // Validate simple pattern
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: 'Invalid date format. Expected YYYY-MM-DD' });
+      }
+      // We'll use PostgreSQL to compute the date in the DB server timezone:
+      // (o.created_at AT TIME ZONE current_setting('TIMEZONE'))::date = $1::date
+      // This ensures we compare calendar date as per DB server timezone.
       params.push(date);
-      paramIndex++;
+      whereClauses.push(`(o.created_at AT TIME ZONE current_setting('TIMEZONE'))::date = $${params.length}::date`);
     }
+
     if (orderType && orderType !== 'all' && typeof orderType === 'string') {
-      whereClauses.push(`o.order_type = $${paramIndex++}`);
       params.push(orderType);
+      whereClauses.push(`o.order_type = $${params.length}`);
     }
-    if (whereClauses.length > 0) { baseQuery += ` WHERE ${whereClauses.join(' AND ')}`; }
+
+    if (whereClauses.length > 0) {
+      baseQuery += ` WHERE ${whereClauses.join(' AND ')}`;
+    }
+
     baseQuery += ` ORDER BY o.created_at DESC;`;
     console.log('Executing query for fetching orders:', baseQuery, params);
     const ordersResult = await client.query(baseQuery, params);
     const orders = ordersResult.rows;
+
     if (orders.length > 0) {
       const orderIds = orders.map(o => o.id);
 
-      // Determine the underlying type of orders.id so we can pass the correct
-      // typed array to the items query (some DBs use integer ids, others uuid).
+      // Determine underlying id type for orders.id
       const typeRes = await client.query(
         "SELECT udt_name FROM information_schema.columns WHERE table_name='orders' AND column_name='id' AND table_schema='public' LIMIT 1"
       );
@@ -48,7 +62,6 @@ router.get('/', async (req: Request, res: Response) => {
 
       let itemsResult;
       if (udt === 'int4' || udt === 'int8') {
-        // DB uses integer ids
         const numericIds = orderIds.map(id => Number(id));
         itemsResult = await client.query(`
           SELECT oi.order_id, oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, oi.is_complimentary AS is_complimentary, mi.name as menu_item_name
@@ -56,7 +69,6 @@ router.get('/', async (req: Request, res: Response) => {
           WHERE oi.order_id = ANY($1::int4[])
         `, [numericIds]);
       } else {
-        // default to uuid-based ids
         itemsResult = await client.query(`
           SELECT oi.order_id, oi.id, oi.quantity, COALESCE(oi.unit_price, mi.price) AS unit_price, oi.total_price, oi.is_complimentary AS is_complimentary, mi.name as menu_item_name
           FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id
@@ -68,6 +80,7 @@ router.get('/', async (req: Request, res: Response) => {
         order.order_items = itemsResult.rows.filter(item => item.order_id === order.id);
       });
     }
+
     res.json(orders);
   } catch (error) {
     console.error('Error fetching orders:', error);
