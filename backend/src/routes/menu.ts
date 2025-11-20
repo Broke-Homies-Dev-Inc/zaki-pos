@@ -200,14 +200,14 @@ router.get('/', async (req: Request, res: Response) => {
 
 // POST create new menu item (sub_category supported)
 router.post('/', async (req: Request, res: Response) => {
-  const { name, category, sub_category, price, available, recipe } = req.body;
+  const { name, category, sub_category, price, available, recipe, stock, low_stock_threshold } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const newItemResult = await client.query(
-      `INSERT INTO menu_items (name, category, sub_category, price, available)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [name, category, sub_category ?? null, price, available ?? true]
+      `INSERT INTO menu_items (name, category, sub_category, price, available, stock, low_stock_threshold)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [name, category, sub_category ?? null, price, available ?? true, stock ?? 0, low_stock_threshold ?? 5]
     );
     const newItemId = newItemResult.rows[0].id;
 
@@ -235,13 +235,13 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT update menu item (include sub_category)
 router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, category, sub_category, price, available, recipe } = req.body;
+  const { name, category, sub_category, price, available, recipe, stock, low_stock_threshold } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query(
-      'UPDATE menu_items SET name = $1, category = $2, sub_category = $3, price = $4, available = $5, updated_at = NOW() WHERE id = $6',
-      [name, category, sub_category ?? null, price, available, id]
+      'UPDATE menu_items SET name = $1, category = $2, sub_category = $3, price = $4, available = $5, stock = $6, low_stock_threshold = $7, updated_at = NOW() WHERE id = $8',
+      [name, category, sub_category ?? null, price, available, stock ?? 0, low_stock_threshold ?? 5, id]
     );
 
     await client.query('DELETE FROM recipes WHERE menu_item_id = $1', [id]);
@@ -274,6 +274,33 @@ router.delete('/:id', async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting menu item:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// PATCH adjust stock for a menu item
+// Body: { adjustment: number } - positive to add, negative to subtract
+router.patch('/:id/stock', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { adjustment } = req.body;
+    
+    if (typeof adjustment !== 'number') {
+      return res.status(400).json({ message: 'adjustment must be a number' });
+    }
+
+    const result = await pool.query(
+      'UPDATE menu_items SET stock = stock + $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [adjustment, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Menu item not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error adjusting stock:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });

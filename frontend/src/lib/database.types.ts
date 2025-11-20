@@ -81,6 +81,9 @@ export interface Database {
           price: number
           quantity_per_order: number | null
           updated_at: string
+          stock?: number
+          low_stock_threshold?: number
+          sub_category?: string | null
         }
         Insert: {
           available?: boolean
@@ -92,6 +95,9 @@ export interface Database {
           price: number
           quantity_per_order?: number | null
           updated_at?: string
+          stock?: number
+          low_stock_threshold?: number
+          sub_category?: string | null
         }
         Update: {
           available?: boolean
@@ -103,6 +109,9 @@ export interface Database {
           price?: number
           quantity_per_order?: number | null
           updated_at?: string
+          stock?: number
+          low_stock_threshold?: number
+          sub_category?: string | null
         }
         Relationships: [
           {

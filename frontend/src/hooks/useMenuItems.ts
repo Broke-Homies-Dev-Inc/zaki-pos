@@ -5,7 +5,12 @@ import type { Database } from '../lib/database.types';
 type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
 type RecipeItem = { inventory_item_id: string; quantity_used: number; item_name?: string; };
 export type MenuItemWithRecipe = Omit<MenuItemInsert, 'id'> & { recipe: RecipeItem[] };
-export type MenuItem = Database['public']['Tables']['menu_items']['Row'] & { recipe: RecipeItem[] };
+export type MenuItem = Database['public']['Tables']['menu_items']['Row'] & { 
+  recipe: RecipeItem[];
+  sub_category?: string | null;
+  stock?: number;
+  low_stock_threshold?: number;
+};
 
 export function useMenuItems() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -46,9 +51,20 @@ export function useMenuItems() {
     } catch (err) { console.error('Failed to delete menu item:', err); }
   }, []);
 
+  const adjustStock = useCallback(async (id: string, adjustment: number) => {
+    try {
+      const response = await api.patch<MenuItem>(`/menu/${id}/stock`, { adjustment });
+      setMenuItems((prev) => prev.map((item) => (item.id === id ? response.data : item)));
+      return response.data;
+    } catch (err) { 
+      console.error('Failed to adjust stock:', err);
+      throw err;
+    }
+  }, []);
+
   useEffect(() => {
     fetchMenuItems();
   }, [fetchMenuItems]);
 
-  return { menuItems, loading, error, fetchMenuItems, addMenuItem, updateMenuItem, deleteMenuItem };
+  return { menuItems, loading, error, fetchMenuItems, addMenuItem, updateMenuItem, deleteMenuItem, adjustStock };
 }

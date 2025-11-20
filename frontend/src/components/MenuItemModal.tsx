@@ -8,7 +8,7 @@ import type { Database } from '../lib/database.types';
 type RecipeItem = { inventory_item_id: string; quantity_used: number; item_name?: string; };
 type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
 type MenuItemWithRecipe = Omit<MenuItemInsert, 'id'> & { recipe: RecipeItem[] };
-type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & { recipe?: RecipeItem[] };
+type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & { recipe?: RecipeItem[]; sub_category?: string | null; };
 
 interface MenuItemModalProps {
   item: MenuItemRow | null;
@@ -73,9 +73,9 @@ export function MenuItemModal({ item, onClose, categories = [], initialValues }:
     e.preventDefault();
     setIsSubmitting(true);
 
-    const payload: Partial<MenuItemWithRecipe> = {
+    const payload: any = {
       name: formData.name,
-      category: formData.category || null,
+      category: formData.category || undefined,
       sub_category: formData.sub_category || null,
       price: parseFloat(formData.price),
       available: item?.available ?? true,
@@ -146,9 +146,11 @@ export function MenuItemModal({ item, onClose, categories = [], initialValues }:
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
-            <input type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="e.g., 180" className="w-full px-3 py-2 border border-gray-300 rounded-md" required min="0" step="0.01" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+              <input type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="e.g., 180" className="w-full px-3 py-2 border border-gray-300 rounded-md" required min="0" step="0.01" />
+            </div>
           </div>
 
           <div className="pt-4 border-t">

@@ -47,6 +47,21 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
 
   // Add item or increment in cart
   const addToCart = (menuItem: MenuItem) => {
+    // Check if item has stock tracking and if stock is available
+    const currentStock = menuItem.stock ?? 0;
+    const currentCartQty = getCartQuantity(menuItem.id);
+    
+    // If stock is 0 or adding would exceed available stock, show alert
+    if (currentStock === 0) {
+      alert(`${menuItem.name} is out of stock.`);
+      return;
+    }
+    
+    if (currentCartQty >= currentStock) {
+      alert(`Cannot add more ${menuItem.name}. Only ${currentStock} available in stock.`);
+      return;
+    }
+    
     setCart((prevCart) => {
       const existingItem = prevCart.find(
         (item) => item.menu_item_id === menuItem.id
@@ -429,11 +444,29 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                                 <div className="pl-4 pr-2 pb-2 space-y-2">
                                   {items.map((item) => {
                                     const qty = getCartQuantity(item.id);
+                                    const currentStock = item.stock ?? 0;
+                                    const isOutOfStock = currentStock === 0;
+                                    const isLowStock = currentStock > 0 && currentStock <= (item.low_stock_threshold ?? 5);
+                                    const canAddMore = qty < currentStock;
+                                    
                                     return (
-                                      <div key={item.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
-                                        <div>
-                                          <div className="font-medium text-sm">{item.name}</div>
-                                          <div className="text-xs text-gray-500">{formatCurrency(Number(item.price))}</div>
+                                      <div key={item.id} className={`flex items-center justify-between p-2 rounded ${isOutOfStock ? 'bg-red-50 opacity-60' : 'hover:bg-gray-50'}`}>
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-medium text-sm">{item.name}</div>
+                                            {isOutOfStock && (
+                                              <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded">Out of Stock</span>
+                                            )}
+                                            {!isOutOfStock && isLowStock && (
+                                              <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">Low Stock</span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            <span>{formatCurrency(Number(item.price))}</span>
+                                            {!isOutOfStock && (
+                                              <span className="text-gray-400">• Stock: {currentStock}</span>
+                                            )}
+                                          </div>
                                         </div>
 
                                         <div className="flex items-center gap-2">
@@ -455,8 +488,19 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
 
                                           <button
                                             onClick={() => addToCart(item)}
-                                            className="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center hover:bg-blue-200"
-                                            title="Add"
+                                            disabled={isOutOfStock || !canAddMore}
+                                            className={`rounded-full w-8 h-8 flex items-center justify-center ${
+                                              isOutOfStock || !canAddMore
+                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                                            }`}
+                                            title={
+                                              isOutOfStock 
+                                                ? 'Out of stock' 
+                                                : !canAddMore 
+                                                ? `Maximum ${currentStock} available`
+                                                : 'Add'
+                                            }
                                           >
                                             <Plus size={14} />
                                           </button>

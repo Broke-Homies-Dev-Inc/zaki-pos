@@ -1,14 +1,14 @@
 // frontend/src/pages/Menu.tsx
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenuItems';
 import { MenuItemModal } from '../components/MenuItemModal';
 import { formatCurrency } from '../lib/utils';
 import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
-import type { Database } from '../lib/database.types';
 import api from '../lib/api';
+import type { MenuItem as HookMenuItem } from '../hooks/useMenuItems';
 
-type MenuItem = Database['public']['Tables']['menu_items']['Row'];
+type MenuItem = HookMenuItem;
 
 // Category row returned from backend
 type CatRow = { id: string; main_category: string; sub_category: string | null };
@@ -35,6 +35,8 @@ export function Menu() {
   // UI: selection for display
   const [selectedMain, setSelectedMain] = useState<string | null>(null);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
+  const [expandedMains, setExpandedMains] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   // initial values when opening Add Item modal (preselect main & sub)
   const [modalInitial, setModalInitial] = useState<{ category?: string; sub_category?: string } | null>(null);
@@ -165,15 +167,6 @@ export function Menu() {
     setIsModalOpen(true);
   };
 
-  // More robust: always open modal and preselect main/sub, also set selectedMain/selectedSubId for UI highlight
-  const handleAddItemToSub = (main: string, subRow: CatRow) => {
-    setSelectedMain(main);
-    setSelectedSubId(subRow.id);
-    setEditingItem(null); // adding new item
-    setModalInitial({ category: main, sub_category: subRow.sub_category ?? '' });
-    setIsModalOpen(true);
-  };
-
   const handleToggleAvailability = async (item: MenuItem) => {
     const updatePayload = {
       name: item.name,
@@ -195,9 +188,18 @@ export function Menu() {
 
   // Derive shown items by selected main/sub (client-side, uses allMenuItems from hook)
   const shownItems = allMenuItems.filter(mi => {
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const matchesName = mi.name.toLowerCase().includes(query);
+      const matchesCategory = mi.category.toLowerCase().includes(query);
+      const matchesSubCategory = mi.sub_category?.toLowerCase().includes(query);
+      if (!matchesName && !matchesCategory && !matchesSubCategory) return false;
+    }
+    
     if (selectedMain && mi.category !== selectedMain) return false;
     if (selectedSubId) {
-      const row = categoryRows.find(r => r.id === selectedSubId);
+      const row = categoryRows.find(r => r.id === selectedSubId); 
       if (!row) return false;
       const subName = row.sub_category;
       if ((mi.sub_category ?? null) !== (subName ?? null)) return false;
@@ -205,165 +207,303 @@ export function Menu() {
     return true;
   });
 
+  const toggleMainExpanded = (main: string) => {
+    const newSet = new Set(expandedMains);
+    if (newSet.has(main)) {
+      newSet.delete(main);
+    } else {
+      newSet.add(main);
+    }
+    setExpandedMains(newSet);
+  };
+
   return (
-    <div>
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Menu Management</h1>
-          <p className="mt-1 text-gray-600">Add, edit, and manage your restaurant's menu items.</p>
+          <p className="mt-1 text-gray-600">Manage your restaurant's menu items and categories</p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={openAddCategory}
-            className="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 transition-colors"
+            className="bg-white border border-gray-300 text-gray-700 font-medium px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors"
           >
-            <Plus size={16} />
+            <Plus size={18} />
             Add Category
           </button>
 
           <button
             onClick={() => handleOpenModal()}
-            className="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
+            className="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-sm"
           >
             <Plus size={20} />
-            Add New Item
+            Add Menu Item
           </button>
         </div>
       </div>
 
-      {/* Category navigation */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="col-span-1">
-          <h4 className="text-sm font-semibold mb-2">Main Categories</h4>
-          <div className="space-y-2">
+      {/* Main Content Area */}
+      <div className="flex-1 flex gap-6 overflow-hidden">
+        {/* Sidebar - Categories */}
+        <div className="w-64 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Categories</h3>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-2">
             <button
               onClick={() => { setSelectedMain(null); setSelectedSubId(null); }}
-              className={`block w-full text-left px-3 py-2 rounded ${selectedMain === null ? 'bg-gray-200' : 'bg-white'}`}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                selectedMain === null 
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
             >
-              All
+              All Items ({allMenuItems.length})
             </button>
-            {mainList.map(main => (
-              <div key={main}>
-                <button
-                  onClick={() => {
-                    if (selectedMain === main) {
-                      setSelectedMain(null);
-                      setSelectedSubId(null);
-                    } else {
-                      setSelectedMain(main);
-                      setSelectedSubId(null);
-                    }
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded ${selectedMain === main ? 'bg-gray-200' : 'bg-white'}`}
-                >
-                  {main}
-                </button>
 
-                {/* If this main is selected, show subcategories below */}
-                {selectedMain === main && (
-                  <div className="pl-4 mt-2 space-y-1">
-                    {(subMap[main] || []).map(subRow => (
-                      <div key={subRow.id} className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 w-full">
-                          <button
-                            onClick={() => setSelectedSubId(subRow.id === selectedSubId ? null : subRow.id)}
-                            className={`text-sm text-left px-2 py-1 rounded w-full ${selectedSubId === subRow.id ? 'bg-blue-50 text-blue-700' : 'bg-white'}`}
-                          >
-                            {subRow.sub_category ?? '(no sub)'}
-                          </button>
+            <div className="mt-2 space-y-1">
+              {mainList.map(main => {
+                const isExpanded = expandedMains.has(main);
+                const isSelected = selectedMain === main;
+                const mainItemCount = allMenuItems.filter(item => item.category === main).length;
+                const subsForMain = subMap[main] || [];
 
-                          {/* Make Add Item button always visible for this subRow so the user can click it directly */}
-                          <button
-                            onClick={() => handleAddItemToSub(main, subRow)}
-                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                          >
-                            + Add Item
-                          </button>
+                return (
+                  <div key={main}>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => toggleMainExpanded(main)}
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
+                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          setSelectedMain(main);
+                          setSelectedSubId(null);
+                          if (!expandedMains.has(main)) {
+                            toggleMainExpanded(main);
+                          }
+                        }}
+                        className={`flex-1 text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                          isSelected && !selectedSubId
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>{main}</span>
+                          <span className="text-xs text-gray-500">({mainItemCount})</span>
                         </div>
+                      </button>
+                    </div>
 
-                        <div className="flex gap-2">
-                          <button className="text-xs text-gray-500 hover:text-gray-700" onClick={async () => {
-                            const newName = prompt('Rename subcategory (leave empty to cancel):', subRow.sub_category ?? '');
-                            if (!newName) return;
-                            try {
-                              await api.put(`/menu/categories/${subRow.id}`, { main_category: main, sub_category: newName.trim() || null });
-                              await loadCategories();
-                            } catch (err) { alert('Failed to rename subcategory'); }
-                          }}>Rename</button>
+                    {/* Subcategories */}
+                    {isExpanded && subsForMain.length > 0 && (
+                      <div className="ml-6 mt-1 space-y-1">
+                        {subsForMain.map(subRow => {
+                          const subItemCount = allMenuItems.filter(
+                            item => item.category === main && (item.sub_category ?? null) === (subRow.sub_category ?? null)
+                          ).length;
+                          const isSubSelected = selectedSubId === subRow.id;
 
-                          <button className="text-xs text-red-500 hover:text-red-700" onClick={async () => {
-                            if (!confirm('Delete this subcategory? This will not delete items automatically.')) return;
-                            try {
-                              await api.delete(`/menu/categories/${subRow.id}`);
-                              await loadCategories();
-                            } catch (err) { alert('Failed to delete'); }
-                          }}>Delete</button>
-                        </div>
+                          return (
+                            <div key={subRow.id} className="group relative">
+                              <button
+                                onClick={() => {
+                                  setSelectedMain(main);
+                                  setSelectedSubId(subRow.id);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                                  isSubSelected
+                                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                                    : 'text-gray-600 hover:bg-gray-50'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span>{subRow.sub_category ?? '(no sub)'}</span>
+                                  <span className="text-xs text-gray-500">({subItemCount})</span>
+                                </div>
+                              </button>
+                            </div>
+                          );
+                        })}
+                        
+                        <button
+                          onClick={() => openAddSubcategoryModal(main)}
+                          className="w-full text-left px-3 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+                        >
+                          + Add subcategory
+                        </button>
                       </div>
-                    ))}
-                    {/* Replace prompt-based add with modal-based add */}
-                    <button
-                      onClick={() => openAddSubcategoryModal(main)}
-                      className="text-xs text-blue-600 hover:underline mt-1"
-                    >
-                      + Add subcategory
-                    </button>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Table area spans rest of columns */}
-        <div className="col-span-3 bg-white rounded-lg shadow-sm overflow-hidden p-4">
-          {loading ? <div className="text-gray-500">Loading menu...</div> : null}
-          {error ? <div className="text-red-600">{error}</div> : null}
+        {/* Main Content - Menu Items */}
+        <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col ">
+          {/* Search and Filter Bar */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Search menu items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              {(selectedMain || searchQuery) && (
+                <button
+                  onClick={() => {
+                    setSelectedMain(null);
+                    setSelectedSubId(null);
+                    setSearchQuery('');
+                  }}
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
 
-          <div className="overflow-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub Category</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Available</th>
-                  <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {(!loading && shownItems.length === 0) && (
-                  <tr><td colSpan={6} className="text-center py-10 text-gray-500">No menu items found for selection.</td></tr>
+            {/* Active Filter Display */}
+            {(selectedMain || selectedSubId) && (
+              <div className="mt-3 flex items-center gap-2 text-sm">
+                <span className="text-gray-600">Showing:</span>
+                {selectedMain && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md">
+                    {selectedMain}
+                  </span>
                 )}
-                {shownItems.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.sub_category ?? '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right font-medium">{formatCurrency(item.price, settings?.currency || 'OMR')}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={item.available}
-                          onChange={() => handleToggleAvailability(item)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                      <button onClick={() => { setModalInitial(null); setEditingItem(item); setIsModalOpen(true); }} className="text-blue-600 hover:text-blue-900 p-1"><Edit size={18} /></button>
-                      <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-900 p-1"><Trash2 size={18} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                {selectedSubId && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md">
+                    {categoryRows.find(r => r.id === selectedSubId)?.sub_category}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Menu Items Content */}
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-gray-500">Loading menu items...</div>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-red-600">{error}</div>
+              </div>
+            ) : shownItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                <p className="text-lg font-medium">No menu items found</p>
+                <p className="text-sm mt-2">Try adjusting your filters or add a new item</p>
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Item Name
+                    </th>
+                    {!selectedMain && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Category
+                      </th>
+                    )}
+                    {!selectedSubId && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Sub Category
+                      </th>
+                    )}
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Price
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Available
+                    </th>
+                    <th className="relative px-6 py-3">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {shownItems.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        {item.name}
+                      </td>
+                      {!selectedMain && (
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {item.category}
+                        </td>
+                      )}
+                      {!selectedSubId && (
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {item.sub_category ?? '-'}
+                        </td>
+                      )}
+                      <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">
+                        {formatCurrency(item.price, settings?.currency || 'OMR')}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.available}
+                            onChange={() => handleToggleAvailability(item)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => { setModalInitial(null); setEditingItem(item); setIsModalOpen(true); }} 
+                            className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(item.id)} 
+                            className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Footer with item count */}
+          {!loading && shownItems.length > 0 && (
+            <div className="px-6 py-3 border-t border-gray-200 bg-gray-50">
+              <p className="text-sm text-gray-600">
+                Showing {shownItems.length} item{shownItems.length !== 1 ? 's' : ''}
+                {selectedMain && ` in ${selectedMain}`}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -526,6 +526,15 @@ router.post('/', async (req: Request, res: Response) => {
         'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, total_price, is_complimentary) VALUES ($1, $2, $3, $4, $5, $6);',
         [newOrder.id, item.menu_item_id, item.quantity, item.unit_price, item.total_price, (item.is_complimentary === true)]
       );
+
+      // Deduct stock from menu_items table
+      // Only deduct if not complimentary and quantity is positive
+      if (!item.is_complimentary && item.quantity > 0) {
+        await client.query(
+          'UPDATE menu_items SET stock = stock - $1, updated_at = NOW() WHERE id = $2',
+          [item.quantity, item.menu_item_id]
+        );
+      }
     }
     await client.query('COMMIT');
     const finalOrderResult = await client.query(`
@@ -551,6 +560,23 @@ router.put('/:id', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    
+    // Get existing order items to restore stock before deleting
+    const existingItems = await client.query(
+      'SELECT menu_item_id, quantity, is_complimentary FROM order_items WHERE order_id = $1',
+      [id]
+    );
+    
+    // Restore stock for existing items
+    for (const existingItem of existingItems.rows) {
+      if (!existingItem.is_complimentary && existingItem.quantity > 0) {
+        await client.query(
+          'UPDATE menu_items SET stock = stock + $1, updated_at = NOW() WHERE id = $2',
+          [existingItem.quantity, existingItem.menu_item_id]
+        );
+      }
+    }
+    
     const updatedOrderResult = await client.query(
       `UPDATE orders 
              SET subtotal = $1, tax_amount = $2, grand_total = $3, notes = $4, updated_at = NOW() 
@@ -558,12 +584,22 @@ router.put('/:id', async (req: Request, res: Response) => {
       [subtotal, tax_amount, grand_total, notes, id]
     );
     if (updatedOrderResult.rows.length === 0) throw new Error('Order not found');
+    
     await client.query('DELETE FROM order_items WHERE order_id = $1', [id]);
+    
     for (const item of items) {
       await client.query(
         'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, total_price, is_complimentary) VALUES ($1, $2, $3, $4, $5, $6)',
         [id, item.menu_item_id, item.quantity, item.unit_price, item.total_price, (item.is_complimentary === true)]
       );
+      
+      // Deduct stock for new items
+      if (!item.is_complimentary && item.quantity > 0) {
+        await client.query(
+          'UPDATE menu_items SET stock = stock - $1, updated_at = NOW() WHERE id = $2',
+          [item.quantity, item.menu_item_id]
+        );
+      }
     }
     await client.query('COMMIT');
     const finalOrderResult = await client.query(`
