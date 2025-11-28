@@ -9,6 +9,7 @@ import {
     Users,
     BarChart2,
     ShoppingBasket,
+    // HandPlatter,
 } from "lucide-react";
 import { useRestaurantSettingsContext } from "../contexts/useRestaurantSettingsContext";
 
@@ -18,6 +19,7 @@ const navigation = [
     { name: "Menu", href: "/menu", icon: Receipt },
     { name: "Inventory", href: "/inventory", icon: Package },
     { name: "Ingredients", href: "/ingredients", icon: ShoppingBasket },
+    // { name: "Waiters", href: "/waiters", icon: HandPlatter },
     { name: "Billing", href: "/billing", icon: FileText },
     { name: "Reports", href: "/reports", icon: BarChart2 },
     { name: "Customers", href: "/customers", icon: Users },
@@ -29,9 +31,9 @@ export function Layout() {
     const { settings, loading } = useRestaurantSettingsContext();
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
-            <aside className="w-64 bg-white border-r border-gray-200 fixed h-full">
-                <div className="p-6 border-b border-gray-200">
+        <div className="h-screen bg-gray-50 flex overflow-hidden">
+            <aside className="w-64 bg-white border-r border-gray-200 fixed h-full flex flex-col">
+                <div className="p-6 border-b border-gray-200 flex-shrink-0">
                     <h1 className="text-2xl font-bold text-gray-900">
                         {loading
                             ? "POS System"
@@ -40,7 +42,7 @@ export function Layout() {
                     <p className="text-sm text-gray-500 mt-1">Point of Sale</p>
                 </div>
 
-                <nav className="p-4 space-y-1">
+                <nav className="p-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar">
                     {navigation.map((item) => {
                         const isActive = location.pathname === item.href;
                         const Icon = item.icon;
@@ -63,7 +65,7 @@ export function Layout() {
                 </nav>
             </aside>
 
-            <main className="ml-64 flex-1">
+            <main className="ml-64 flex-1 h-screen overflow-y-auto custom-scrollbar">
                 <div className="p-6">
                     <Outlet />
                 </div>
@@ -71,3 +73,5 @@ export function Layout() {
         </div>
     );
 }
+
+export default Layout;

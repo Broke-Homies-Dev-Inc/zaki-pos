@@ -76,13 +76,15 @@ router.get('/layout', async (req: Request, res: Response) => {
               rt.id AS table_id, rt.section_id, rt.name AS table_name, rt.status AS table_status,
               o.id AS active_order_id, o.order_number AS active_order_number, o.grand_total AS active_order_grand_total,
               o.status AS active_order_status, o.created_at AS active_order_created_at,
-              c.id AS active_order_customer_id, c.mobile_number AS active_order_customer_mobile
+              c.id AS active_order_customer_id, c.mobile_number AS active_order_customer_mobile,
+              w.id AS active_order_waiter_id, w.name AS active_order_waiter_name, w.employee_id AS active_order_waiter_employee_id
           FROM restaurant_tables rt
           LEFT JOIN (
               SELECT *, ROW_NUMBER() OVER(PARTITION BY restaurant_table_id ORDER BY orders.created_at DESC) as rn
               FROM orders WHERE status = 'pending'
           ) o ON o.restaurant_table_id = rt.id AND o.rn = 1
           LEFT JOIN customers c ON o.customer_id = c.id
+          LEFT JOIN waiters w ON o.waiter_id = w.id
           ORDER BY rt.name;
       `);
     const layout = floorsResult.rows.map(floor => ({
@@ -100,7 +102,9 @@ router.get('/layout', async (req: Request, res: Response) => {
               order_id: table.active_order_id, order_number: table.active_order_number,
               grand_total: parseFloat(table.active_order_grand_total),
               status: table.active_order_status, created_at: table.active_order_created_at,
-              customer_id: table.active_order_customer_id, customer_mobile: table.active_order_customer_mobile
+              customer_id: table.active_order_customer_id, customer_mobile: table.active_order_customer_mobile,
+              waiter_id: table.active_order_waiter_id, waiter_name: table.active_order_waiter_name, 
+              waiter_employee_id: table.active_order_waiter_employee_id
             } : null
           };
         })

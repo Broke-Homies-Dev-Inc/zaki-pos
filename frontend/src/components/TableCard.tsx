@@ -40,9 +40,16 @@ export const TableCard = ({
                 {table.table_name}
             </h4>
             {table.active_order && (
-                <p className="text-lg font-bold text-gray-700">
-                    {formatCurrency(table.active_order.grand_total)}
-                </p>
+                <>
+                    <p className="text-lg font-bold text-gray-700">
+                        {formatCurrency(table.active_order.grand_total)}
+                    </p>
+                    {table.active_order.waiter_name && (
+                        <p className="text-xs text-gray-600 mt-1">
+                            👤 {table.active_order.waiter_name}
+                        </p>
+                    )}
+                </>
             )}
             {table.active_order && (
                 <button

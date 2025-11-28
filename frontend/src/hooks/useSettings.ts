@@ -12,6 +12,9 @@ interface ActiveOrderSummary {
   created_at: string;
   customer_id: string | null;
   customer_mobile: string | null; // <-- ADDED
+  waiter_id?: string | null;
+  waiter_name?: string | null;
+  waiter_employee_id?: string | null;
   order_items?: Array<{
     menu_item_id: string;
     menu_item_name: string;

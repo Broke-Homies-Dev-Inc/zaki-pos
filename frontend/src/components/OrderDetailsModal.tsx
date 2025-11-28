@@ -147,6 +147,12 @@ export function OrderDetailsModal({
                                 {formatOrderType(order.order_type)}
                             </span>
                         </div>
+                        {(order as any).waiter_name && (
+                            <p className="text-sm text-gray-600 mt-1">
+                                👤 Served by: <span className="font-medium">{(order as any).waiter_name}</span>
+                                {(order as any).waiter_employee_id && ` (${(order as any).waiter_employee_id})`}
+                            </p>
+                        )}
                     </div>
                     <div>
                         {order.status === "pending" && !isEditing && (

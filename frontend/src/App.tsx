@@ -9,6 +9,7 @@ import Reports from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { Customers } from "./pages/Customers";
 import { Ingredients } from "./pages/Ingredients";
+import Waiters from "./pages/settings/Waiter";
 import { RestaurantSettingsProvider } from "./contexts/RestaurantSettingsContext";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -23,6 +24,7 @@ function App() {
                         <Route path="menu" element={<Menu />} />
                         <Route path="inventory" element={<Inventory />} />
                         <Route path="ingredients" element={<Ingredients />} />
+                        <Route path="waiters" element={<Waiters />} />
                         <Route path="billing" element={<Billing />} />
                         <Route path="reports" element={<Reports />} />
                         <Route path="customers" element={<Customers />} />

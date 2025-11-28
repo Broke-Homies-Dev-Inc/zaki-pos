@@ -179,6 +179,7 @@ export interface Database {
           subtotal: number
           tax_amount: number
           updated_at: string
+          waiter_id: string | null
         }
         Insert: {
           created_at?: string
@@ -190,6 +191,7 @@ export interface Database {
           subtotal: number
           tax_amount: number
           updated_at?: string
+          waiter_id?: string | null
         }
         Update: {
           created_at?: string
@@ -201,8 +203,16 @@ export interface Database {
           subtotal?: number
           tax_amount?: number
           updated_at?: string
+          waiter_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_waiter_id_fkey"
+            columns: ["waiter_id"]
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       restaurant_settings: {
         Row: {
@@ -252,6 +262,36 @@ export interface Database {
         }
         Relationships: []
       }
+      waiters: {
+        Row: {
+          id: string
+          name: string
+          employee_id: string
+          phone_number: string | null
+          status: "active" | "inactive" | "on_break"
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          employee_id: string
+          phone_number?: string | null
+          status?: "active" | "inactive" | "on_break"
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          employee_id?: string
+          phone_number?: string | null
+          status?: "active" | "inactive" | "on_break"
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -262,6 +302,7 @@ export interface Database {
     Enums: {
       order_status: "pending" | "completed" | "cancelled"
       payment_method: "cash" | "card" | "digital"
+      waiter_status: "active" | "inactive" | "on_break"
     }
     CompositeTypes: {
       [_ in never]: never

@@ -13,12 +13,13 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { date, orderType } = req.query;
     let baseQuery = `
-      SELECT o.*, c.name AS customer_name, c.mobile_number, rt.name AS table_name, s.name AS section_name, f.name AS floor_name
+      SELECT o.*, c.name AS customer_name, c.mobile_number, rt.name AS table_name, s.name AS section_name, f.name AS floor_name, w.name AS waiter_name, w.employee_id AS waiter_employee_id
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN restaurant_tables rt ON o.restaurant_table_id = rt.id
       LEFT JOIN sections s ON rt.section_id = s.id
       LEFT JOIN floors f ON s.floor_id = f.id
+      LEFT JOIN waiters w ON o.waiter_id = w.id
     `;
     const params: any[] = [];
     const whereClauses: string[] = [];
@@ -103,12 +104,16 @@ router.get('/:id', async (req: Request, res: Response) => {
              c.status as customer_status,
              rt.name AS table_name, 
              s.name AS section_name, 
-             f.name AS floor_name
+             f.name AS floor_name,
+             w.name AS waiter_name,
+             w.employee_id AS waiter_employee_id,
+             w.id AS waiter_id
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN restaurant_tables rt ON o.restaurant_table_id = rt.id
       LEFT JOIN sections s ON rt.section_id = s.id
       LEFT JOIN floors f ON s.floor_id = f.id
+      LEFT JOIN waiters w ON o.waiter_id = w.id
       WHERE o.id = $1
     `, [id]);
 
@@ -179,12 +184,15 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
              c.status as customer_status,
              rt.name AS table_name, 
              s.name AS section_name, 
-             f.name AS floor_name
+             f.name AS floor_name,
+             w.name AS waiter_name,
+             w.employee_id AS waiter_employee_id
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN restaurant_tables rt ON o.restaurant_table_id = rt.id
       LEFT JOIN sections s ON rt.section_id = s.id
       LEFT JOIN floors f ON s.floor_id = f.id
+      LEFT JOIN waiters w ON o.waiter_id = w.id
       WHERE o.id = $1
     `, [id]);
 
@@ -348,6 +356,12 @@ router.post('/:id/generate-pdf', async (req: Request, res: Response) => {
           <span>${order.customer_name}</span>
         </div>
         ` : ''}
+        ${order.waiter_name ? `
+        <div class="row">
+          <span>Served by:</span>
+          <span>${order.waiter_name} (${order.waiter_employee_id})</span>
+        </div>
+        ` : ''}
 
         <div class="line"></div>
 
@@ -490,6 +504,28 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
+    // WAITER ASSIGNMENT LOGIC
+    let assignedWaiterId = order.waiter_id || null;
+    
+    // Check if this table already has a pending order with a waiter assigned
+    if (order.order_type === 'dine_in' && order.restaurant_table_id) {
+      const existingOrderResult = await client.query(
+        `SELECT waiter_id FROM orders 
+         WHERE restaurant_table_id = $1 
+         AND status IN ('pending') 
+         AND waiter_id IS NOT NULL
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [order.restaurant_table_id]
+      );
+
+      // If table has an existing order with a waiter, use the same waiter
+      if (existingOrderResult.rows.length > 0 && existingOrderResult.rows[0].waiter_id) {
+        assignedWaiterId = existingOrderResult.rows[0].waiter_id;
+        console.log(`Table already has orders - assigning same waiter: ${assignedWaiterId}`);
+      }
+    }
+
     let customerId = null;
     if (order.mobile_number && order.mobile_number.trim()) {
       // If mobile number provided, find or create customer and mark as VERIFIED
@@ -510,9 +546,9 @@ router.post('/', async (req: Request, res: Response) => {
       customerId = walkInCustomerResult.rows[0].id;
     }
     const newOrderQuery = `
-      INSERT INTO orders (order_number, customer_id, order_type, subtotal, tax_amount, grand_total, status, notes, restaurant_table_id, take_away_method, car_details, delivery_address)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *;`;
-    const orderParams = [order.order_number, customerId, order.order_type, order.subtotal, order.tax_amount, order.grand_total, 'pending', order.notes || null, order.restaurant_table_id || null, order.take_away_method || null, order.car_details || null, order.delivery_address || null];
+      INSERT INTO orders (order_number, customer_id, order_type, subtotal, tax_amount, grand_total, status, notes, restaurant_table_id, waiter_id, take_away_method, car_details, delivery_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *;`;
+    const orderParams = [order.order_number, customerId, order.order_type, order.subtotal, order.tax_amount, order.grand_total, 'pending', order.notes || null, order.restaurant_table_id || null, assignedWaiterId, order.take_away_method || null, order.car_details || null, order.delivery_address || null];
     const orderResult = await client.query(newOrderQuery, orderParams);
     const newOrder = orderResult.rows[0];
 
@@ -538,10 +574,13 @@ router.post('/', async (req: Request, res: Response) => {
     }
     await client.query('COMMIT');
     const finalOrderResult = await client.query(`
-    SELECT o.*, c.name as customer_name, c.mobile_number,
+    SELECT o.*, c.name as customer_name, c.mobile_number, w.name as waiter_name, w.employee_id as waiter_employee_id,
          (SELECT json_agg(json_build_object('menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', COALESCE(oi.unit_price, mi.price), 'total_price', oi.total_price, 'is_complimentary', COALESCE(oi.is_complimentary,false))) 
         FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
-    FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
+    FROM orders o 
+    LEFT JOIN customers c ON o.customer_id = c.id 
+    LEFT JOIN waiters w ON o.waiter_id = w.id
+    WHERE o.id = $1;
   `, [newOrder.id]);
     res.status(201).json({ ...finalOrderResult.rows[0], order_items: finalOrderResult.rows[0].order_items || [] });
   } catch (error) {
@@ -603,10 +642,13 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     await client.query('COMMIT');
     const finalOrderResult = await client.query(`
-      SELECT o.*, c.name as customer_name, c.mobile_number,
+      SELECT o.*, c.name as customer_name, c.mobile_number, w.name as waiter_name, w.employee_id as waiter_employee_id,
            (SELECT json_agg(json_build_object('menu_item_id', oi.menu_item_id, 'menu_item_name', mi.name, 'quantity', oi.quantity, 'id', oi.id, 'unit_price', oi.unit_price, 'total_price', oi.total_price, 'is_complimentary', COALESCE(oi.is_complimentary,false))) 
           FROM order_items oi JOIN menu_items mi ON mi.id = oi.menu_item_id WHERE oi.order_id = o.id) as order_items
-      FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = $1;
+      FROM orders o 
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN waiters w ON o.waiter_id = w.id
+      WHERE o.id = $1;
     `, [id]);
     res.json({ ...finalOrderResult.rows[0], order_items: finalOrderResult.rows[0].order_items || [] });
   } catch (error) {

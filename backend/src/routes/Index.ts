@@ -6,6 +6,7 @@ import settingRoutes from './setting';
 import dashboardRoutes from './dashboard';
 import customerRoutes from './customer';
 import reportsRoutes from './reports';
+import waiterRoutes from './waiter';
 
 
 const router = Router();
@@ -17,5 +18,6 @@ router.use('/setting', settingRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/customers', customerRoutes);
 router.use('/reports', reportsRoutes);
+router.use('/waiters', waiterRoutes);
 
 export default router;

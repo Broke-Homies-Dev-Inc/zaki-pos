@@ -289,14 +289,36 @@ router.patch('/:id/stock', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'adjustment must be a number' });
     }
 
-    const result = await pool.query(
-      'UPDATE menu_items SET stock = stock + $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-      [adjustment, id]
+    // Validate: adjustment must be a whole number (no decimals)
+    if (!Number.isInteger(adjustment)) {
+      return res.status(400).json({ message: 'adjustment must be a whole number' });
+    }
+
+    // Get current stock first to validate the operation
+    const currentResult = await pool.query(
+      'SELECT stock FROM menu_items WHERE id = $1',
+      [id]
     );
 
-    if (result.rows.length === 0) {
+    if (currentResult.rows.length === 0) {
       return res.status(404).json({ message: 'Menu item not found' });
     }
+
+    const currentStock = currentResult.rows[0].stock || 0;
+    const newStock = currentStock + adjustment;
+
+    // Validate: stock cannot go negative
+    if (newStock < 0) {
+      return res.status(400).json({ 
+        message: `Cannot reduce stock below 0. Current stock: ${currentStock}, attempted adjustment: ${adjustment}` 
+      });
+    }
+
+    // Perform the update with the validated new stock value
+    const result = await pool.query(
+      'UPDATE menu_items SET stock = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [newStock, id]
+    );
 
     res.json(result.rows[0]);
   } catch (error) {

@@ -4,6 +4,7 @@ import { X, Trash2, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { useMenuItems } from "../hooks/useMenuItems";
 import { useOrders, type OrderCreatePayload } from "../hooks/useOrders";
 import { useSettings } from "../hooks/useSettings"; // Import the settings hook
+import { useWaiters } from "../hooks/useWaiters";
 import api from "../lib/api";
 import {
   calculateTax,
@@ -23,6 +24,7 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
   const { menuItems } = useMenuItems();
   const { createOrder } = useOrders();
   const { layout: tableLayout } = useSettings(); // Get the table layout data
+  const { waiters } = useWaiters();
 
   // State Management
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -32,6 +34,7 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
     "dine_in" | "take_away" | "delivery"
   >("dine_in");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedWaiter, setSelectedWaiter] = useState<string>("");
 
   // New state for conditional fields
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -134,6 +137,11 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
       return alert("Please enter a delivery address.");
     }
 
+    // Validation: Waiter must be selected
+    if (!selectedWaiter) {
+      return alert("Please select a waiter for this order.");
+    }
+
     setIsSubmitting(true);
 
     const orderPayload: OrderCreatePayload = {
@@ -147,6 +155,7 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
       status: "pending",
       notes: null,
       restaurant_table_id: orderType === "dine_in" ? selectedTable : null,
+      waiter_id: selectedWaiter,
       take_away_method: orderType === "take_away" ? takeAwayMethod : null,
       car_details:
         orderType === "take_away" && takeAwayMethod === "car"
@@ -184,6 +193,23 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
     const timer = setTimeout(fetchByPhone, 400);
     return () => clearTimeout(timer);
   }, [mobileNumber]);
+
+  // Auto-assign waiter when table is selected if table already has orders with a waiter
+  useEffect(() => {
+    if (selectedTable && orderType === "dine_in" && tableLayout) {
+      // Find the table in the layout
+      for (const floor of tableLayout) {
+        for (const section of floor.sections) {
+          const table = section.tables.find((t: any) => t.table_id === selectedTable);
+          if (table && table.active_order && table.active_order.waiter_id) {
+            // Table has an active order with a waiter, auto-select that waiter
+            setSelectedWaiter(table.active_order.waiter_id);
+            return;
+          }
+        }
+      }
+    }
+  }, [selectedTable, orderType, tableLayout]);
 
   // --- Conditional Input Components ---
   const DineInOptions = () => {
@@ -548,6 +574,38 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                 <option value="delivery">Delivery</option>
               </select>
 
+              {/* Waiter Selection */}
+              <div>
+                <select
+                  value={selectedWaiter}
+                  onChange={(e) => setSelectedWaiter(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md bg-white"
+                  required
+                >
+                  <option value="">Select Waiter *</option>
+                  {waiters.map((waiter) => (
+                    <option key={waiter.id} value={waiter.id}>
+                      {waiter.name} ({waiter.employee_id})
+                    </option>
+                  ))}
+                </select>
+                {selectedTable && orderType === "dine_in" && tableLayout && (() => {
+                  for (const floor of tableLayout) {
+                    for (const section of floor.sections) {
+                      const table = section.tables.find((t: any) => t.table_id === selectedTable);
+                      if (table && table.active_order && table.active_order.waiter_name) {
+                        return (
+                          <p className="text-xs text-blue-600 mt-1">
+                            Note: This table is currently served by {table.active_order.waiter_name}
+                          </p>
+                        );
+                      }
+                    }
+                  }
+                  return null;
+                })()}
+              </div>
+
               {orderType === "dine_in" && <DineInOptions />}
               {orderType === "take_away" && <TakeAwayOptions />}
               {orderType === "delivery" && <DeliveryOptions />}
@@ -629,18 +687,21 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
             disabled={
               isSubmitting ||
               cart.length === 0 ||
+              !selectedWaiter ||
               (orderType === "dine_in" && !selectedTable) ||
               (orderType === "delivery" && !deliveryAddress.trim())
             }
             className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
             title={
-              orderType === "dine_in" && !selectedTable
+              !selectedWaiter
+                ? "Please select a waiter"
+                : orderType === "dine_in" && !selectedTable
                 ? "Please select a table for dine-in orders"
                 : orderType === "delivery" && !deliveryAddress.trim()
                 ? "Please enter a delivery address"
                 : cart.length === 0
                 ? "Add items to the order"
-                : ""
+                : "Create Order"
             }
           >
             {isSubmitting ? "Creating..." : "Create Order"}

@@ -48,8 +48,25 @@ export function Inventory() {
 
   const handleAdjustStock = async () => {
     if (!stockAdjustItem || !stockAdjustment) return;
-    const adjustment = parseFloat(stockAdjustment);
-    if (isNaN(adjustment)) return;
+    const adjustment = parseInt(stockAdjustment);
+    if (isNaN(adjustment)) {
+      alert('Please enter a valid whole number');
+      return;
+    }
+    
+    // Validate: adjustment must be a whole number
+    if (!Number.isInteger(adjustment)) {
+      alert('Stock adjustment must be a whole number (no decimals)');
+      return;
+    }
+    
+    // Validate: stock cannot go negative
+    const currentStock = stockAdjustItem.stock ?? 0;
+    const newStock = currentStock + adjustment;
+    if (newStock < 0) {
+      alert(`Cannot reduce stock below 0. Current stock is ${currentStock}, attempted adjustment: ${adjustment}`);
+      return;
+    }
     
     setIsAdjusting(true);
     try {
@@ -210,7 +227,7 @@ export function Inventory() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    {item.stock === 0 ? (
+                    {item.stock === 0  ? (
                       <div className="flex items-center justify-center gap-2">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-800 bg-red-100 rounded-lg border-2 border-red-300">
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -219,7 +236,7 @@ export function Inventory() {
                           Out of Stock
                         </span>
                       </div>
-                    ) : (item.low_stock_threshold && item.stock && item.stock <= item.low_stock_threshold) ? (
+                    ) : (item.low_stock_threshold && item.stock && item.stock <= item.low_stock_threshold && item.stock >=0 ) ? (
                       <div className="flex items-center justify-center gap-2">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-100 rounded-lg border-2 border-amber-300 animate-pulse">
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -357,18 +374,26 @@ export function Inventory() {
                 onChange={(e) => setStockAdjustment(e.target.value)}
                 placeholder="e.g., +10 or -5"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                step="0.01"
+                step="1"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Use positive numbers to add stock, negative to subtract
+                Use positive numbers to add stock, negative to subtract (whole numbers only)
               </p>
-              {stockAdjustment && !isNaN(parseFloat(stockAdjustment)) && (
-                <p className="text-sm mt-2">
-                  New stock will be: <span className="font-semibold text-blue-600">
-                    {((stockAdjustItem.stock ?? 0) + parseFloat(stockAdjustment)).toFixed(2)}
-                  </span>
-                </p>
-              )}
+              {stockAdjustment && !isNaN(parseFloat(stockAdjustment)) && (() => {
+                const currentStock = stockAdjustItem.stock ?? 0;
+                const adjustment = parseInt(stockAdjustment);
+                const newStock = currentStock + adjustment;
+                const isValid = Number.isInteger(adjustment) && newStock >= 0;
+                return (
+                  <p className={`text-sm mt-2 ${!isValid ? 'text-red-600' : ''}`}>
+                    New stock will be: <span className={`font-semibold ${isValid ? 'text-blue-600' : 'text-red-600'}`}>
+                      {newStock}
+                    </span>
+                    {!Number.isInteger(adjustment) && <span className="block text-xs text-red-600 mt-1">⚠ Must be a whole number</span>}
+                    {newStock < 0 && <span className="block text-xs text-red-600 mt-1">⚠ Stock cannot be negative</span>}
+                  </p>
+                );
+              })()}
             </div>
 
             <div className="flex justify-end gap-3">
