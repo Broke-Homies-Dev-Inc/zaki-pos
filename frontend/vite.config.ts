@@ -13,8 +13,9 @@ export default defineConfig({
   // This is the important change:
   base: './',
   server: {
-    host: '0.0.0.0',   
-    port: 5173,
-    strictPort: true
+    host: '0.0.0.0',
+    port: 5172,
+    strictPort: true,
+    allowedHosts: ['hdz.stevefez.com']
   }
 })

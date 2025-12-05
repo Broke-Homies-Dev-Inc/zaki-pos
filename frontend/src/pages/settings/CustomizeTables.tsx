@@ -54,8 +54,11 @@ export default function CustomizeTables({ onBack }: CustomizeTablesProps) {
     const handleAddSection = (floorId: string) => {
         const floor = layout.find(f => f.floor_id === floorId);
         if (floor) {
-            const newName = getNextSectionName(floor.sections || []);
-            addSection(newName, floorId);
+            const suggestedName = getNextSectionName(floor.sections || []);
+            const newName = window.prompt('Enter section name:', suggestedName);
+            if (newName && newName.trim()) {
+                addSection(newName.trim(), floorId);
+            }
         }
     };
 
@@ -85,9 +88,28 @@ export default function CustomizeTables({ onBack }: CustomizeTablesProps) {
         }
     };
 
-    const handleDeleteTable = (tableId: string, tableName: string) => {
-        if (window.confirm(`Are you sure you want to delete "${tableName}"?`)) {
-            deleteTable(tableId);
+    const handleDeleteTable = (sectionId: string) => {
+        let section: Section | undefined;
+        for (const floor of layout) {
+            section = (floor.sections || []).find(s => s.section_id === sectionId);
+            if (section) break;
+        }
+
+        if (section && section.tables && section.tables.length > 0) {
+            // Find table with highest number
+            const tableNumbers = section.tables
+                .map(t => t.table_name.match(/^Table (\d+)$/))
+                .filter(Boolean)
+                .map(match => parseInt(match![1]));
+            
+            if (tableNumbers.length > 0) {
+                const maxNumber = Math.max(...tableNumbers);
+                const tableToDelete = section.tables.find(t => t.table_name === `Table ${maxNumber}`);
+                
+                if (tableToDelete && window.confirm(`Are you sure you want to delete "${tableToDelete.table_name}"?`)) {
+                    deleteTable(tableToDelete.table_id);
+                }
+            }
         }
     };
 
@@ -137,15 +159,19 @@ export default function CustomizeTables({ onBack }: CustomizeTablesProps) {
                                                         <Trash2 size={14} />
                                                     </button>
                                                 </div>
-                                                <button onClick={() => handleAddTable(section.section_id)} className="text-xs text-blue-600 font-semibold hover:underline">+ Add Table</button>
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => handleDeleteTable(section.section_id)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Remove last table">
+                                                        <Plus size={16} className="rotate-45" />
+                                                    </button>
+                                                    <button onClick={() => handleAddTable(section.section_id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Add table">
+                                                        <Plus size={16} />
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="grid grid-cols-5 gap-2 pl-4">
                                                 {(section.tables || []).map((table) => (
-                                                    <div key={table.table_id} className="group bg-gray-100 text-center py-2 px-4 rounded-md text-sm text-gray-800 flex items-center justify-center gap-2">
+                                                    <div key={table.table_id} className="bg-gray-100 text-center py-2 px-4 rounded-md text-sm text-gray-800">
                                                         <span>{table.table_name}</span>
-                                                        <button onClick={() => handleDeleteTable(table.table_id, table.table_name)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <Trash2 size={12} />
-                                                        </button>
                                                     </div>
                                                 ))}
                                                 {(section.tables || []).length === 0 && <p className="text-xs text-gray-400 col-span-5">No tables in this section.</p>}
