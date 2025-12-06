@@ -21,4 +21,34 @@ const api = axios.create({
 });
 
 export const BACKEND_URL = backend;
+
+// Upload menu item image
+export const uploadMenuItemImage = async (
+  imageFile: File,
+  category: string,
+  sub_category: string | null,
+  item_name: string
+): Promise<string> => {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  formData.append('category', category);
+  formData.append('sub_category', sub_category || '');
+  formData.append('item_name', item_name);
+
+  const response = await api.post('/upload/menu-item-image', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+
+  return response.data.image_url;
+};
+
+// Delete menu item image
+export const deleteMenuItemImage = async (image_url: string): Promise<void> => {
+  await api.delete('/upload/menu-item-image', {
+    data: { image_url },
+  });
+};
+
 export default api;

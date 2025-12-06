@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from "react";
 import { X, Trash2, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { useMenuItems } from "../hooks/useMenuItems";
 import { useOrders, type OrderCreatePayload } from "../hooks/useOrders";
-import { useSettings } from "../hooks/useSettings"; // Import the settings hook
+import { useSettings } from "../hooks/useSettings";
 import { useWaiters } from "../hooks/useWaiters";
 import api from "../lib/api";
 import {
@@ -14,16 +14,24 @@ import {
 } from "../lib/utils";
 import type { Database } from "../lib/database.types";
 
-type MenuItem = Database["public"]["Tables"]["menu_items"]["Row"];
+// Portion type (Quarter / Half / Full etc.)
+type PortionSize = { name: string; price: number };
+
+// Extend MenuItem row with typed portion_sizes
+type MenuItem = Database["public"]["Tables"]["menu_items"]["Row"] & {
+  portion_sizes?: PortionSize[] | null;
+};
+
 type OrderItemInsert = Database["public"]["Tables"]["order_items"]["Insert"];
 type CartItem = Omit<OrderItemInsert, "order_id" | "id" | "created_at"> & {
   menu_item_name: string;
+  portion_name?: string | null; // which portion was chosen, if any
 };
 
 export function CreateOrderModal({ onClose }: { onClose: () => void }) {
   const { menuItems } = useMenuItems();
   const { createOrder } = useOrders();
-  const { layout: tableLayout } = useSettings(); // Get the table layout data
+  const { layout: tableLayout } = useSettings();
   const { waiters } = useWaiters();
 
   // State Management
@@ -45,33 +53,53 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
   const [deliveryAddress, setDeliveryAddress] = useState("");
 
   // Collapsible state for categories/subcategories
-  const [expandedMain, setExpandedMain] = useState<string | null>(null); // main category name
-  const [expandedSub, setExpandedSub] = useState<Record<string, string | null>>({}); // key: mainCategory -> subCategory
+  const [expandedMain, setExpandedMain] = useState<string | null>(null);
+  const [expandedSub, setExpandedSub] = useState<
+    Record<string, string | null>
+  >({});
 
-  // Add item or increment in cart
-  const addToCart = (menuItem: MenuItem) => {
-    // Check if item has stock tracking and if stock is available
+  // Helper: get total quantity of a menu item (all portions combined) in cart
+  const getCartQuantity = (menuItemId: string) => {
+    return cart
+      .filter((c) => c.menu_item_id === menuItemId)
+      .reduce((sum, c) => sum + c.quantity, 0);
+  };
+
+  // Add item (or a specific portion) to cart
+  const addToCart = (
+    menuItem: MenuItem,
+    portionName?: string | null,
+    overridePrice?: number
+  ) => {
+    // Stock check is for the whole item (all portions together)
     const currentStock = menuItem.stock ?? 0;
     const currentCartQty = getCartQuantity(menuItem.id);
-    
-    // If stock is 0 or adding would exceed available stock, show alert
+
     if (currentStock === 0) {
       alert(`${menuItem.name} is out of stock.`);
       return;
     }
-    
+
     if (currentCartQty >= currentStock) {
-      alert(`Cannot add more ${menuItem.name}. Only ${currentStock} available in stock.`);
+      alert(
+        `Cannot add more ${menuItem.name}. Only ${currentStock} available in stock.`
+      );
       return;
     }
-    
+
+    const unitPrice = overridePrice ?? Number(menuItem.price);
+
     setCart((prevCart) => {
       const existingItem = prevCart.find(
-        (item) => item.menu_item_id === menuItem.id
+        (item) =>
+          item.menu_item_id === menuItem.id &&
+          (item.portion_name || null) === (portionName || null)
       );
+
       if (existingItem) {
         return prevCart.map((item) =>
-          item.menu_item_id === menuItem.id
+          item.menu_item_id === menuItem.id &&
+          (item.portion_name || null) === (portionName || null)
             ? {
                 ...item,
                 quantity: item.quantity + 1,
@@ -80,40 +108,54 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
             : item
         );
       }
+
       return [
         ...prevCart,
         {
           menu_item_id: menuItem.id,
           quantity: 1,
-          unit_price: Number(menuItem.price),
-          total_price: Number(menuItem.price),
+          unit_price: unitPrice,
+          total_price: unitPrice,
           menu_item_name: menuItem.name,
+          portion_name: portionName || null,
         },
       ];
     });
   };
 
-  // Decrease quantity (from menu or cart). If quantity reaches 0, remove item.
+  // Decrease quantity by menu item (ignores portion, just decreases first match)
   const decreaseFromMenu = (menuItem: MenuItem) => {
-    setCart((prevCart) =>
-      prevCart
-        .map((i) =>
-          i.menu_item_id === menuItem.id
-            ? {
-                ...i,
-                quantity: i.quantity - 1,
-                total_price: (i.quantity - 1) * Number(i.unit_price),
-              }
-            : i
-        )
-        .filter((i) => i.quantity > 0)
-    );
+    setCart((prevCart) => {
+      let changed = false;
+      const updated = prevCart
+        .map((i) => {
+          if (!changed && i.menu_item_id === menuItem.id) {
+            changed = true;
+            const newQty = i.quantity - 1;
+            if (newQty <= 0) return null;
+            return {
+              ...i,
+              quantity: newQty,
+              total_price: newQty * Number(i.unit_price),
+            };
+          }
+          return i;
+        })
+        .filter((i): i is CartItem => i !== null);
+      return updated;
+    });
   };
 
-  // Remove completely from cart
-  const removeFromCart = (menuItemId: string) => {
+  // Remove completely from cart (all portions for that line)
+  const removeFromCart = (menuItemId: string, portionName?: string | null) => {
     setCart((prevCart) =>
-      prevCart.filter((item) => item.menu_item_id !== menuItemId)
+      prevCart.filter(
+        (item) =>
+          !(
+            item.menu_item_id === menuItemId &&
+            (item.portion_name || null) === (portionName || null)
+          )
+      )
     );
   };
 
@@ -127,17 +169,14 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
   const handleSubmit = async () => {
     if (cart.length === 0) return alert("Cannot create an empty order.");
 
-    // Validation: Dine-in orders must have a table assigned
     if (orderType === "dine_in" && !selectedTable) {
       return alert("Please select a table for dine-in orders.");
     }
 
-    // Validation: Delivery orders must have an address
     if (orderType === "delivery" && !deliveryAddress.trim()) {
       return alert("Please enter a delivery address.");
     }
 
-    // Validation: Waiter must be selected
     if (!selectedWaiter) {
       return alert("Please select a waiter for this order.");
     }
@@ -164,6 +203,7 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
       delivery_address: orderType === "delivery" ? deliveryAddress : null,
     };
 
+    // portion_name is kept on frontend only; backend ignores extra fields
     const itemsPayload = cart.map(({ menu_item_name, ...item }) => item);
     const result = await createOrder(orderPayload, itemsPayload);
     setIsSubmitting(false);
@@ -185,7 +225,7 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
         if (res && res.data) {
           if (res.data.name) setCustomerName(res.data.name);
         }
-      } catch (err) {
+      } catch {
         // ignore
       }
     };
@@ -197,12 +237,12 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
   // Auto-assign waiter when table is selected if table already has orders with a waiter
   useEffect(() => {
     if (selectedTable && orderType === "dine_in" && tableLayout) {
-      // Find the table in the layout
       for (const floor of tableLayout) {
         for (const section of floor.sections) {
-          const table = section.tables.find((t: any) => t.table_id === selectedTable);
+          const table = section.tables.find(
+            (t: any) => t.table_id === selectedTable
+          );
           if (table && table.active_order && table.active_order.waiter_id) {
-            // Table has an active order with a waiter, auto-select that waiter
             setSelectedWaiter(table.active_order.waiter_id);
             return;
           }
@@ -373,23 +413,16 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
 
   // group menu items by main -> sub -> items
   const grouped = useMemo(() => {
-    // structure: { [main]: { [sub]: MenuItem[] } }
     const g: Record<string, Record<string, MenuItem[]>> = {};
     (menuItems || []).forEach((m) => {
       const main = m.category ?? "Uncategorized";
       const sub = m.sub_category ?? "-";
       if (!g[main]) g[main] = {};
       if (!g[main][sub]) g[main][sub] = [];
-      g[main][sub].push(m);
+      g[main][sub].push(m as MenuItem);
     });
     return g;
   }, [menuItems]);
-
-  // Helper: get quantity for a menu item in the cart
-  const getCartQuantity = (menuItemId: string) => {
-    const it = cart.find((c) => c.menu_item_id === menuItemId);
-    return it ? it.quantity : 0;
-  };
 
   // toggle main expansion
   const toggleMain = (main: string) => {
@@ -409,8 +442,13 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-2xl font-semibold text-gray-800">Create New Order</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <h2 className="text-2xl font-semibold text-gray-800">
+            Create New Order
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
             <X size={24} />
           </button>
         </div>
@@ -423,7 +461,9 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
 
             <div className="space-y-2 max-h-[450px] overflow-y-auto">
               {Object.keys(grouped).length === 0 && (
-                <p className="text-gray-500 text-center py-6">No menu items available.</p>
+                <p className="text-gray-500 text-center py-6">
+                  No menu items available.
+                </p>
               )}
 
               {Object.entries(grouped).map(([main, subs]) => {
@@ -438,10 +478,16 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                     >
                       <div className="flex items-center gap-3">
                         <div className="text-gray-700 font-medium">{main}</div>
-                        <div className="text-xs text-gray-500">{totalSubCount} sub</div>
+                        <div className="text-xs text-gray-500">
+                          {totalSubCount} sub
+                        </div>
                       </div>
                       <div>
-                        {mainOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        {mainOpen ? (
+                          <ChevronDown size={18} />
+                        ) : (
+                          <ChevronRight size={18} />
+                        )}
                       </div>
                     </button>
 
@@ -457,80 +503,197 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                                   onClick={() => toggleSub(main, sub)}
                                   className="flex items-center gap-2 text-left w-full"
                                 >
-                                  <div className="text-sm text-gray-700">{sub === "-" ? <em className="text-gray-400">No sub</em> : sub}</div>
-                                  <div className="text-xs text-gray-400">({items.length})</div>
+                                  <div className="text-sm text-gray-700">
+                                    {sub === "-" ? (
+                                      <em className="text-gray-400">No sub</em>
+                                    ) : (
+                                      sub
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-400">
+                                    ({items.length})
+                                  </div>
                                 </button>
-                                {/* No "Add" near subcategory as requested */}
                                 <div>
-                                  {subOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                  {subOpen ? (
+                                    <ChevronDown size={16} />
+                                  ) : (
+                                    <ChevronRight size={16} />
+                                  )}
                                 </div>
                               </div>
 
                               {subOpen && (
                                 <div className="pl-4 pr-2 pb-2 space-y-2">
                                   {items.map((item) => {
-                                    const qty = getCartQuantity(item.id);
+                                    const qtyTotal = getCartQuantity(item.id);
                                     const currentStock = item.stock ?? 0;
                                     const isOutOfStock = currentStock === 0;
-                                    const isLowStock = currentStock > 0 && currentStock <= (item.low_stock_threshold ?? 5);
-                                    const canAddMore = qty < currentStock;
-                                    
+                                    const isLowStock =
+                                      currentStock > 0 &&
+                                      currentStock <=
+                                        (item.low_stock_threshold ?? 5);
+                                    const canAddMore =
+                                      qtyTotal < currentStock;
+                                    const portions =
+                                      (item.portion_sizes || []) ?? [];
+
+                                    const hasPortions =
+                                      Array.isArray(portions) &&
+                                      portions.length > 0;
+
                                     return (
-                                      <div key={item.id} className={`flex items-center justify-between p-2 rounded ${isOutOfStock ? 'bg-red-50 opacity-60' : 'hover:bg-gray-50'}`}>
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-2">
-                                            <div className="font-medium text-sm">{item.name}</div>
-                                            {isOutOfStock && (
-                                              <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded">Out of Stock</span>
-                                            )}
-                                            {!isOutOfStock && isLowStock && (
-                                              <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">Low Stock</span>
-                                            )}
+                                      <div
+                                        key={item.id}
+                                        className={`p-2 rounded border border-transparent ${
+                                          isOutOfStock
+                                            ? "bg-red-50 opacity-60"
+                                            : "hover:bg-gray-50"
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <div className="font-medium text-sm">
+                                                {item.name}
+                                              </div>
+                                              {isOutOfStock && (
+                                                <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded">
+                                                  Out of Stock
+                                                </span>
+                                              )}
+                                              {!isOutOfStock &&
+                                                isLowStock && (
+                                                  <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                                                    Low Stock
+                                                  </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                              <span>
+                                                {formatCurrency(
+                                                  Number(item.price)
+                                                )}
+                                              </span>
+                                              {!isOutOfStock && (
+                                                <span className="text-gray-400">
+                                                  • Stock: {currentStock}
+                                                </span>
+                                              )}
+                                            </div>
                                           </div>
-                                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                                            <span>{formatCurrency(Number(item.price))}</span>
-                                            {!isOutOfStock && (
-                                              <span className="text-gray-400">• Stock: {currentStock}</span>
-                                            )}
-                                          </div>
+
+                                          {/* For items without portions, show the old +/- controls */}
+                                          {!hasPortions && (
+                                            <div className="flex items-center gap-2">
+                                              {qtyTotal > 0 ? (
+                                                <button
+                                                  onClick={() =>
+                                                    decreaseFromMenu(item)
+                                                  }
+                                                  className="bg-gray-100 text-gray-800 rounded-full w-8 h-8 flex items-center justify-center hover:bg-gray-200"
+                                                  title="Decrease"
+                                                >
+                                                  −
+                                                </button>
+                                              ) : (
+                                                <div style={{ width: 32 }} />
+                                              )}
+
+                                              {qtyTotal > 0 && (
+                                                <div className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm font-medium">
+                                                  {qtyTotal}
+                                                </div>
+                                              )}
+
+                                              <button
+                                                onClick={() =>
+                                                  addToCart(item)
+                                                }
+                                                disabled={
+                                                  isOutOfStock || !canAddMore
+                                                }
+                                                className={`rounded-full w-8 h-8 flex items-center justify-center ${
+                                                  isOutOfStock || !canAddMore
+                                                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                                    : "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                                                }`}
+                                                title={
+                                                  isOutOfStock
+                                                    ? "Out of stock"
+                                                    : !canAddMore
+                                                    ? `Maximum ${currentStock} available`
+                                                    : "Add"
+                                                }
+                                              >
+                                                <Plus size={14} />
+                                              </button>
+                                            </div>
+                                          )}
                                         </div>
 
-                                        <div className="flex items-center gap-2">
-                                          {qty > 0 ? (
-                                            <button
-                                              onClick={() => decreaseFromMenu(item)}
-                                              className="bg-gray-100 text-gray-800 rounded-full w-8 h-8 flex items-center justify-center hover:bg-gray-200"
-                                              title="Decrease"
-                                            >
-                                              −
-                                            </button>
-                                          ) : (
-                                            <div style={{ width: 32 }} />
-                                          )}
+                                        {/* Portion chips for items that have portion_sizes */}
+                                        {hasPortions && !isOutOfStock && (
+                                          <div className="mt-2 flex flex-wrap gap-2">
+                                            {portions.map((portion) => {
+                                              const portionQty = cart
+                                                .filter(
+                                                  (c) =>
+                                                    c.menu_item_id ===
+                                                      item.id &&
+                                                    (c.portion_name || null) ===
+                                                      portion.name
+                                                )
+                                                .reduce(
+                                                  (sum, c) =>
+                                                    sum + c.quantity,
+                                                  0
+                                                );
+                                              const canAddThisPortion =
+                                                getCartQuantity(item.id) <
+                                                currentStock;
 
-                                          {qty > 0 && (
-                                            <div className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm font-medium">{qty}</div>
-                                          )}
-
-                                          <button
-                                            onClick={() => addToCart(item)}
-                                            disabled={isOutOfStock || !canAddMore}
-                                            className={`rounded-full w-8 h-8 flex items-center justify-center ${
-                                              isOutOfStock || !canAddMore
-                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                                : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                                            }`}
-                                            title={
-                                              isOutOfStock 
-                                                ? 'Out of stock' 
-                                                : !canAddMore 
-                                                ? `Maximum ${currentStock} available`
-                                                : 'Add'
-                                            }
-                                          >
-                                            <Plus size={14} />
-                                          </button>
-                                        </div>
+                                              return (
+                                                <button
+                                                  key={portion.name}
+                                                  type="button"
+                                                  disabled={!canAddThisPortion}
+                                                  onClick={() =>
+                                                    addToCart(
+                                                      item,
+                                                      portion.name,
+                                                      portion.price
+                                                    )
+                                                  }
+                                                  className={`px-3 py-1 rounded-full text-xs border flex items-center gap-1 ${
+                                                    !canAddThisPortion
+                                                      ? "border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50"
+                                                      : "border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                                                  }`}
+                                                  title={
+                                                    !canAddThisPortion
+                                                      ? `Maximum ${currentStock} available`
+                                                      : "Add this portion"
+                                                  }
+                                                >
+                                                  <span className="font-medium">
+                                                    {portion.name}
+                                                  </span>
+                                                  <span>
+                                                    {formatCurrency(
+                                                      portion.price
+                                                    )}
+                                                  </span>
+                                                  {portionQty > 0 && (
+                                                    <span className="ml-1 inline-flex items-center justify-center rounded-full bg-blue-600 text-white text-[10px] w-5 h-5">
+                                                      {portionQty}
+                                                    </span>
+                                                  )}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -589,21 +752,31 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                     </option>
                   ))}
                 </select>
-                {selectedTable && orderType === "dine_in" && tableLayout && (() => {
-                  for (const floor of tableLayout) {
-                    for (const section of floor.sections) {
-                      const table = section.tables.find((t: any) => t.table_id === selectedTable);
-                      if (table && table.active_order && table.active_order.waiter_name) {
-                        return (
-                          <p className="text-xs text-blue-600 mt-1">
-                            Note: This table is currently served by {table.active_order.waiter_name}
-                          </p>
+                {selectedTable &&
+                  orderType === "dine_in" &&
+                  tableLayout &&
+                  (() => {
+                    for (const floor of tableLayout) {
+                      for (const section of floor.sections) {
+                        const table = section.tables.find(
+                          (t: any) => t.table_id === selectedTable
                         );
+                        if (
+                          table &&
+                          table.active_order &&
+                          table.active_order.waiter_name
+                        ) {
+                          return (
+                            <p className="text-xs text-blue-600 mt-1">
+                              Note: This table is currently served by{" "}
+                              {table.active_order.waiter_name}
+                            </p>
+                          );
+                        }
                       }
                     }
-                  }
-                  return null;
-                })()}
+                    return null;
+                  })()}
               </div>
 
               {orderType === "dine_in" && <DineInOptions />}
@@ -615,37 +788,80 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
               <h3 className="font-semibold text-lg mb-3">Current Order</h3>
               <div className="space-y-3">
                 {cart.map((item) => (
-                  <div key={item.menu_item_id} className="flex justify-between items-center">
+                  <div
+                    key={`${item.menu_item_id}-${item.portion_name || "base"}`}
+                    className="flex justify-between items-center"
+                  >
                     <div>
-                      <p className="font-medium">{item.menu_item_name}</p>
-                      <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                      <p className="font-medium">
+                        {item.menu_item_name}
+                        {item.portion_name
+                          ? ` (${item.portion_name})`
+                          : ""}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Qty: {item.quantity}
+                      </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <p>{formatCurrency(item.total_price)}</p>
-                      <button onClick={() => {
-                        setCart((prevCart) =>
-                          prevCart
-                            .map((i) =>
-                              i.menu_item_id === item.menu_item_id
+                      <button
+                        onClick={() => {
+                          setCart((prevCart) =>
+                            prevCart
+                              .map((i) =>
+                                i.menu_item_id === item.menu_item_id &&
+                                (i.portion_name || null) ===
+                                  (item.portion_name || null)
+                                  ? {
+                                      ...i,
+                                      quantity: i.quantity - 1,
+                                      total_price:
+                                        (i.quantity - 1) *
+                                        Number(i.unit_price),
+                                    }
+                                  : i
+                              )
+                              .filter((i) => i.quantity > 0)
+                          );
+                        }}
+                        className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center hover:bg-gray-200"
+                      >
+                        −
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setCart((prevCart) =>
+                            prevCart.map((i) =>
+                              i.menu_item_id === item.menu_item_id &&
+                              (i.portion_name || null) ===
+                                (item.portion_name || null)
                                 ? {
                                     ...i,
-                                    quantity: i.quantity - 1,
-                                    total_price: (i.quantity - 1) * Number(i.unit_price),
+                                    quantity: i.quantity + 1,
+                                    total_price:
+                                      (i.quantity + 1) *
+                                      Number(i.unit_price),
                                   }
                                 : i
                             )
-                            .filter((i) => i.quantity > 0)
-                        );
-                      }} className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center hover:bg-gray-200">−</button>
-
-                      <button onClick={() => {
-                        const menu = menuItems.find(m => m.id === item.menu_item_id);
-                        if (menu) addToCart(menu);
-                      }} className="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center hover:bg-blue-200">
+                          );
+                        }}
+                        className="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center hover:bg-blue-200"
+                      >
                         <Plus size={14} />
                       </button>
 
-                      <button onClick={() => removeFromCart(item.menu_item_id)} className="text-red-500 hover:text-red-600">
+                      <button
+                        onClick={() =>
+                          removeFromCart(
+                            item.menu_item_id,
+                            item.portion_name || null
+                          )
+                        }
+                        className="text-red-500 hover:text-red-600"
+                      >
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -653,7 +869,9 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                 ))}
 
                 {cart.length === 0 && (
-                  <p className="text-gray-500 text-center py-4">Select items from the menu to start an order.</p>
+                  <p className="text-gray-500 text-center py-4">
+                    Select items from the menu to start an order.
+                  </p>
                 )}
               </div>
             </div>
@@ -679,7 +897,10 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="p-4 mt-auto bg-gray-50 rounded-b-xl flex justify-end gap-3 border-t">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300"
+          >
             Cancel
           </button>
           <button

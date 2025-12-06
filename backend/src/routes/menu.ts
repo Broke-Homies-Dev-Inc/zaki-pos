@@ -10,16 +10,18 @@ const getFullMenuItem = async (client: any, id: string) => {
     `
     SELECT 
       mi.*, 
-      (SELECT json_agg(
-        json_build_object(
-          'inventory_item_id', r.inventory_item_id,
-          'item_name', inv.item_name,
-          'quantity_used', r.quantity_used
+      (
+        SELECT json_agg(
+          json_build_object(
+            'inventory_item_id', r.inventory_item_id,
+            'item_name',        inv.item_name,
+            'quantity_used',    r.quantity_used
+          )
         )
-      )
-      FROM recipes r
-      JOIN inventory inv ON inv.id = r.inventory_item_id
-      WHERE r.menu_item_id = mi.id) as recipe
+        FROM recipes r
+        JOIN inventory inv ON inv.id = r.inventory_item_id
+        WHERE r.menu_item_id = mi.id
+      ) AS recipe
     FROM menu_items mi
     WHERE mi.id = $1;
   `,
@@ -32,12 +34,6 @@ const getFullMenuItem = async (client: any, id: string) => {
 
 /* ---------------------------
    Categories endpoints
-   - GET /menu/categories         -> [{ main_category, sub_category, id }]
-   - GET /menu/categories/main    -> distinct main categories
-   - GET /menu/categories/:main/subcategories -> subcategories for main
-   - POST /menu/categories        -> create (main_category, sub_category)
-   - PUT /menu/categories/:id     -> update
-   - DELETE /menu/categories/:id  -> delete
 ----------------------------*/
 
 // Return all category rows (main + sub)
@@ -76,7 +72,10 @@ router.get('/categories/:main/subcategories', async (req: Request, res: Response
   const main = req.params.main;
   try {
     const result = await pool.query(
-      `SELECT id, sub_category FROM categories WHERE main_category = $1 ORDER BY sub_category NULLS LAST;`,
+      `SELECT id, sub_category 
+         FROM categories 
+         WHERE main_category = $1 
+         ORDER BY sub_category NULLS LAST;`,
       [main]
     );
     res.json(result.rows);
@@ -105,17 +104,21 @@ router.post('/categories', async (req: Request, res: Response) => {
     if (result.rows.length > 0) {
       return res.status(201).json(result.rows[0]);
     } else {
-      // fetch the existing row (or just echo back)
       const exist = await pool.query(
-        `SELECT id, main_category, sub_category FROM categories WHERE main_category = $1 AND (sub_category IS NOT DISTINCT FROM $2) LIMIT 1;`,
+        `SELECT id, main_category, sub_category 
+         FROM categories 
+         WHERE main_category = $1 
+           AND (sub_category IS NOT DISTINCT FROM $2) 
+         LIMIT 1;`,
         [main_category.trim(), sub_category ?? null]
       );
       if (exist.rows.length > 0) return res.status(200).json(exist.rows[0]);
-      return res.status(200).json({ main_category: main_category.trim(), sub_category: sub_category ?? null });
+      return res
+        .status(200)
+        .json({ main_category: main_category.trim(), sub_category: sub_category ?? null });
     }
   } catch (err: any) {
     console.error('Error creating category:', err);
-    // If unique constraint error arises for some other index, return friendly message
     return res.status(500).json({ message: 'Failed to create category' });
   }
 });
@@ -129,10 +132,14 @@ router.put('/categories/:id', async (req: Request, res: Response) => {
   }
   try {
     const result = await pool.query(
-      `UPDATE categories SET main_category = $1, sub_category = $2 WHERE id = $3 RETURNING id, main_category, sub_category;`,
+      `UPDATE categories 
+       SET main_category = $1, sub_category = $2 
+       WHERE id = $3 
+       RETURNING id, main_category, sub_category;`,
       [main_category.trim(), sub_category ?? null, id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    if (result.rows.length === 0)
+      return res.status(404).json({ message: 'Not found' });
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Error updating category:', err);
@@ -153,15 +160,13 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
 });
 
 /* ---------------------------
-   Menu items endpoints (existing logic preserved)
-   Note: GET / supports optional ?category=&sub_category= filters
+   Menu items endpoints
 ----------------------------*/
 
 // GET all menu items (include sub_category and recipe). Accept optional filters.
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { category, sub_category } = req.query;
-    // Use parameterized query; if param is missing, pass NULL and handle with IS NULL OR = ...
     const params: any[] = [];
     let whereClause = `WHERE 1=1`;
     if (category) {
@@ -176,38 +181,79 @@ router.get('/', async (req: Request, res: Response) => {
     const sql = `
       SELECT 
         mi.*, 
-        (SELECT json_agg(
-          json_build_object(
-            'inventory_item_id', r.inventory_item_id,
-            'item_name', inv.item_name,
-            'quantity_used', r.quantity_used
+        (
+          SELECT json_agg(
+            json_build_object(
+              'inventory_item_id', r.inventory_item_id,
+              'item_name',        inv.item_name,
+              'quantity_used',    r.quantity_used
+            )
           )
-        )
-        FROM recipes r
-        JOIN inventory inv ON inv.id = r.inventory_item_id
-        WHERE r.menu_item_id = mi.id) as recipe
+          FROM recipes r
+          JOIN inventory inv ON inv.id = r.inventory_item_id
+          WHERE r.menu_item_id = mi.id
+        ) AS recipe
       FROM menu_items mi
       ${whereClause}
       ORDER BY mi.category, mi.sub_category NULLS LAST, mi.name;
     `;
     const result = await pool.query(sql, params);
-    res.json(result.rows.map((row: any) => ({ ...row, recipe: row.recipe || [] })));
+    res.json(
+      result.rows.map((row: any) => ({
+        ...row,
+        recipe: row.recipe || [],
+      }))
+    );
   } catch (error) {
     console.error('Error fetching menu items:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
-// POST create new menu item (sub_category supported)
+// POST create new menu item (sub_category + portion_sizes supported)
 router.post('/', async (req: Request, res: Response) => {
-  const { name, category, sub_category, price, available, recipe, stock, low_stock_threshold } = req.body;
+  const {
+    name,
+    category,
+    sub_category,
+    price,
+    available,
+    recipe,
+    stock,
+    low_stock_threshold,
+    description,
+    image_url,
+    portion_sizes,          // NEW
+  } = req.body;
+
+  // IMPORTANT: pg does not auto-JSON encode objects. Serialize before insert.
+  const portionJson =
+    portion_sizes && Array.isArray(portion_sizes) && portion_sizes.length > 0
+      ? JSON.stringify(portion_sizes)
+      : null;
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const newItemResult = await client.query(
-      `INSERT INTO menu_items (name, category, sub_category, price, available, stock, low_stock_threshold)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [name, category, sub_category ?? null, price, available ?? true, stock ?? 0, low_stock_threshold ?? 5]
+      `INSERT INTO menu_items 
+        (name, category, sub_category, price, available, stock, low_stock_threshold, description, image_url, portion_sizes)
+       VALUES 
+        ($1,   $2,       $3,          $4,    $5,        $6,    $7,                 $8,          $9,         $10)
+       RETURNING id`,
+      [
+        name,
+        category,
+        sub_category ?? null,
+        price,
+        available ?? true,
+        stock ?? 0,
+        low_stock_threshold ?? 5,
+        description ?? null,
+        image_url ?? null,
+        portionJson, // JSON string or null
+      ]
     );
     const newItemId = newItemResult.rows[0].id;
 
@@ -219,6 +265,7 @@ router.post('/', async (req: Request, res: Response) => {
         );
       }
     }
+
     await client.query('COMMIT');
 
     const finalItem = await getFullMenuItem(client, newItemId);
@@ -232,16 +279,59 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PUT update menu item (include sub_category)
+// PUT update menu item (include sub_category + portion_sizes)
 router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, category, sub_category, price, available, recipe, stock, low_stock_threshold } = req.body;
+  const {
+    name,
+    category,
+    sub_category,
+    price,
+    available,
+    recipe,
+    stock,
+    low_stock_threshold,
+    description,
+    image_url,
+    portion_sizes,          // NEW
+  } = req.body;
+
+  const portionJson =
+    portion_sizes && Array.isArray(portion_sizes) && portion_sizes.length > 0
+      ? JSON.stringify(portion_sizes)
+      : null;
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     await client.query(
-      'UPDATE menu_items SET name = $1, category = $2, sub_category = $3, price = $4, available = $5, stock = $6, low_stock_threshold = $7, updated_at = NOW() WHERE id = $8',
-      [name, category, sub_category ?? null, price, available, stock ?? 0, low_stock_threshold ?? 5, id]
+      `UPDATE menu_items 
+       SET name               = $1,
+           category           = $2,
+           sub_category       = $3,
+           price              = $4,
+           available          = $5,
+           stock              = $6,
+           low_stock_threshold= $7,
+           description        = $8,
+           image_url          = $9,
+           portion_sizes      = $10,
+           updated_at         = NOW()
+       WHERE id = $11`,
+      [
+        name,
+        category,
+        sub_category ?? null,
+        price,
+        available,
+        stock ?? 0,
+        low_stock_threshold ?? 5,
+        description ?? null,
+        image_url ?? null,
+        portionJson,
+        id,
+      ]
     );
 
     await client.query('DELETE FROM recipes WHERE menu_item_id = $1', [id]);
@@ -253,6 +343,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         );
       }
     }
+
     await client.query('COMMIT');
 
     const finalItem = await getFullMenuItem(client, id);
@@ -284,14 +375,16 @@ router.patch('/:id/stock', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { adjustment } = req.body;
-    
+
     if (typeof adjustment !== 'number') {
       return res.status(400).json({ message: 'adjustment must be a number' });
     }
 
     // Validate: adjustment must be a whole number (no decimals)
     if (!Number.isInteger(adjustment)) {
-      return res.status(400).json({ message: 'adjustment must be a whole number' });
+      return res
+        .status(400)
+        .json({ message: 'adjustment must be a whole number' });
     }
 
     // Get current stock first to validate the operation
@@ -309,8 +402,8 @@ router.patch('/:id/stock', async (req: Request, res: Response) => {
 
     // Validate: stock cannot go negative
     if (newStock < 0) {
-      return res.status(400).json({ 
-        message: `Cannot reduce stock below 0. Current stock: ${currentStock}, attempted adjustment: ${adjustment}` 
+      return res.status(400).json({
+        message: `Cannot reduce stock below 0. Current stock: ${currentStock}, attempted adjustment: ${adjustment}`,
       });
     }
 

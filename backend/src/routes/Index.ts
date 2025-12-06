@@ -7,6 +7,7 @@ import dashboardRoutes from './dashboard';
 import customerRoutes from './customer';
 import reportsRoutes from './reports';
 import waiterRoutes from './waiter';
+import uploadRoutes from './upload';
 
 
 const router = Router();
@@ -19,5 +20,6 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/customers', customerRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/waiters', waiterRoutes);
+router.use('/upload', uploadRoutes);
 
 export default router;

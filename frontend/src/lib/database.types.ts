@@ -84,6 +84,8 @@ export interface Database {
           stock?: number
           low_stock_threshold?: number
           sub_category?: string | null
+          description?: string | null
+          image_url?: string | null
         }
         Insert: {
           available?: boolean
@@ -98,6 +100,8 @@ export interface Database {
           stock?: number
           low_stock_threshold?: number
           sub_category?: string | null
+          description?: string | null
+          image_url?: string | null
         }
         Update: {
           available?: boolean
@@ -112,6 +116,8 @@ export interface Database {
           stock?: number
           low_stock_threshold?: number
           sub_category?: string | null
+          description?: string | null
+          image_url?: string | null
         }
         Relationships: [
           {
