@@ -37,10 +37,10 @@ const OrderInfo = ({ order }: { order: OrderWithItems }) => {
     case 'delivery':
       return (
         <span
-          className="text-gray-700 truncate"
+          className="block truncate text-gray-700"
           title={order.delivery_address || ''}
         >
-          {order.delivery_address || 'No address'}
+          {order.delivery_address?.slice(0, 25) + "..." || 'No address'}
         </span>
       );
 
@@ -186,7 +186,7 @@ export function Orders() {
       {/* Orders Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -253,7 +253,7 @@ export function Orders() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {formatOrderType(order.order_type)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm max-w-xs">
+                    <td className="px-6 py-4 text-sm w-64 overflow-hidden">
                       <OrderInfo order={order} />
                     </td>
                     {/* 👇 NEW CELL: WAITER NAME */}

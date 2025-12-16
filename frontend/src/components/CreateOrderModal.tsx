@@ -26,6 +26,26 @@ type OrderItemInsert = Database["public"]["Tables"]["order_items"]["Insert"];
 type CartItem = Omit<OrderItemInsert, "order_id" | "id" | "created_at"> & {
   menu_item_name: string;
   portion_name?: string | null; // which portion was chosen, if any
+  applied_discount_percent?: number; // NEW: helpful metadata stored on frontend only
+  original_unit_price?: number; // NEW: helpful metadata
+};
+
+/* -------------------------
+   Offer types (frontend-only)
+--------------------------*/
+type OfferSet = {
+  id: number | string;
+  name: string;
+  discount_percent: number;
+  active: boolean;
+  menu_item_ids: Array<number | string>;
+};
+
+type ItemOffer = {
+  id: number | string;
+  menu_item_id: number | string;
+  discount_percent: number;
+  active: boolean;
 };
 
 export function CreateOrderModal({ onClose }: { onClose: () => void }) {
@@ -33,6 +53,11 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
   const { createOrder } = useOrders();
   const { layout: tableLayout } = useSettings();
   const { waiters } = useWaiters();
+
+  // Offers state
+  const [offers, setOffers] = useState<OfferSet[]>([]);
+  const [itemOffers, setItemOffers] = useState<ItemOffer[]>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
 
   // State Management
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -65,6 +90,56 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
       .reduce((sum, c) => sum + c.quantity, 0);
   };
 
+  // -------------------------
+  // Offers loading + helpers
+  // -------------------------
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setOffersLoading(true);
+      try {
+        // Using setting endpoints provided in your backend router
+        const offersRes = await api.get("/setting/offers");
+        const itemOffersRes = await api.get("/setting/item-offers");
+        if (!mounted) return;
+        setOffers(Array.isArray(offersRes.data) ? offersRes.data : []);
+        setItemOffers(Array.isArray(itemOffersRes.data) ? itemOffersRes.data : []);
+      } catch (err) {
+        console.warn("Could not load offers:", err);
+        // silent fail — offers are optional
+      } finally {
+        if (mounted) setOffersLoading(false);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Helper: return best discount percent for a menu item (item-offer vs any active offer set)
+  const getBestDiscountPercent = (menuItemId: string | number) => {
+    let best = 0;
+
+    // item-offer
+    for (const io of itemOffers) {
+      if (!io.active) continue;
+      if (String(io.menu_item_id) === String(menuItemId)) {
+        best = Math.max(best, Number(io.discount_percent || 0));
+      }
+    }
+
+    // offer sets (an offer applies if menu_item_ids includes this item)
+    for (const o of offers) {
+      if (!o.active) continue;
+      if (Array.isArray(o.menu_item_ids) && o.menu_item_ids.some((m) => String(m) === String(menuItemId))) {
+        best = Math.max(best, Number(o.discount_percent || 0));
+      }
+    }
+
+    return best;
+  };
+
   // Add item (or a specific portion) to cart
   const addToCart = (
     menuItem: MenuItem,
@@ -87,7 +162,14 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    const unitPrice = overridePrice ?? Number(menuItem.price);
+    // Compute base unit price (portion override or item price)
+    let unitPrice = overridePrice ?? Number(menuItem.price);
+
+    // Apply best discount (if any) — THIS IS THE ONLY PLACE PRICE IS MODIFIED
+    const discountPercent = getBestDiscountPercent(menuItem.id);
+    if (discountPercent && discountPercent > 0) {
+      unitPrice = Number((unitPrice * (1 - discountPercent / 100)).toFixed(2));
+    }
 
     setCart((prevCart) => {
       const existingItem = prevCart.find(
@@ -109,6 +191,7 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
         );
       }
 
+      // push new cart item — include metadata original_unit_price & applied_discount_percent
       return [
         ...prevCart,
         {
@@ -118,6 +201,8 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
           total_price: unitPrice,
           menu_item_name: menuItem.name,
           portion_name: portionName || null,
+          applied_discount_percent: discountPercent || 0,
+          original_unit_price: overridePrice ?? Number(menuItem.price),
         },
       ];
     });
@@ -580,6 +665,12 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                                                   • Stock: {currentStock}
                                                 </span>
                                               )}
+                                              {/* show simple discount badge if present */}
+                                              {getBestDiscountPercent(item.id) > 0 && (
+                                                <span className="ml-2 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded">
+                                                  {getBestDiscountPercent(item.id)}% off
+                                                </span>
+                                              )}
                                             </div>
                                           </div>
 
@@ -800,7 +891,10 @@ export function CreateOrderModal({ onClose }: { onClose: () => void }) {
                           : ""}
                       </p>
                       <p className="text-sm text-gray-500">
-                        Qty: {item.quantity}
+                        Qty: {item.quantity}{" "}
+                        {item.applied_discount_percent && item.applied_discount_percent > 0 ? (
+                          <span className="ml-2 text-xs text-green-700">({item.applied_discount_percent}% discounted)</span>
+                        ) : null}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
