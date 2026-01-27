@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
 import { X, Gift } from 'lucide-react';
+import { toast } from 'react-toastify';
 import api from '../lib/api';
 import { formatCurrency } from '../lib/utils';
-import type { Order } from '../hooks/useOrders'; // Assuming you have an Order type
+
+// Define the Order interface locally since it's not exported from useOrders
+interface Order {
+  id: string;
+  table_number: number;
+  status: string;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+  // Add other Order properties as needed
+}
 
 // We need to define the shape of Order and OrderItem
 interface OrderItem {
@@ -76,7 +87,7 @@ export function ComplimentModal({ orderId, onClose, onSave }: ComplimentModalPro
       onClose();
     } catch (error) {
       console.error("Failed to save compliments", error);
-      alert("Failed to save. Please try again.");
+      toast.error("Failed to save. Please try again.");
     } finally {
       setLoading(false);
     }

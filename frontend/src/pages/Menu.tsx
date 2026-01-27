@@ -7,6 +7,9 @@ import { formatCurrency } from '../lib/utils';
 import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 import api from '../lib/api';
 import type { MenuItem as HookMenuItem } from '../hooks/useMenuItems';
+import { confirmAlert } from 'react-confirm-alert';
+import 'react-confirm-alert/src/react-confirm-alert.css';
+import { toast } from 'react-toastify';
 
 type MenuItem = HookMenuItem;
 
@@ -31,6 +34,12 @@ export function Menu() {
   // NEW: modal for adding a subcategory specifically (so we can prefill main)
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [subModalMainPrefill, setSubModalMainPrefill] = useState<string | null>(null);
+
+  // Edit category modal
+  const [isEditCatModalOpen, setIsEditCatModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CatRow | null>(null);
+  const [editMain, setEditMain] = useState('');
+  const [editSub, setEditSub] = useState('');
 
   // UI: selection for display
   const [selectedMain, setSelectedMain] = useState<string | null>(null);
@@ -161,6 +170,76 @@ export function Menu() {
     }
   };
 
+  // Open edit category modal
+  const openEditCategory = (catRow: CatRow) => {
+    setEditingCategory(catRow);
+    setEditMain(catRow.main_category);
+    setEditSub(catRow.sub_category || '');
+    setCatError(null);
+    setIsEditCatModalOpen(true);
+  };
+
+  // Update category
+  const updateCategory = async () => {
+    if (!editingCategory) return;
+    if (!editMain.trim()) {
+      setCatError('Main category required');
+      return;
+    }
+    setCatSaving(true);
+    setCatError(null);
+    try {
+      await api.put(`/menu/categories/${editingCategory.id}`, {
+        main_category: editMain.trim(),
+        sub_category: editSub.trim() || null
+      });
+      await loadCategories();
+      window.dispatchEvent(new CustomEvent('categories-updated'));
+      setIsEditCatModalOpen(false);
+      setEditingCategory(null);
+    } catch (err: any) {
+      setCatError(err?.response?.data?.message || err.message || 'Failed to update category');
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  // Delete category
+  const deleteCategory = async (catRow: CatRow) => {
+    const catName = catRow.sub_category 
+      ? `${catRow.main_category} > ${catRow.sub_category}`
+      : catRow.main_category;
+    
+    confirmAlert({
+      title: 'Delete Category',
+      message: `Are you sure you want to delete "${catName}"? This action cannot be undone.`,
+      buttons: [
+        {
+          label: 'Yes, Delete',
+          onClick: async () => {
+            try {
+              await api.delete(`/menu/categories/${catRow.id}`);
+              await loadCategories();
+              window.dispatchEvent(new CustomEvent('categories-updated'));
+              // Clear selection if deleted category was selected
+              if (selectedSubId === catRow.id) {
+                setSelectedSubId(null);
+              }
+            } catch (err: any) {
+              toast.error(err?.response?.data?.message || err.message || 'Failed to delete category');
+            }
+          },
+          className: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700'
+        },
+        {
+          label: 'Cancel',
+          onClick: () => {},
+          className: 'bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400'
+        }
+      ]
+    });
+  };
+
   const handleOpenModal = (item: MenuItem | null = null) => {
     setEditingItem(item);
     setModalInitial(null);
@@ -181,9 +260,24 @@ export function Menu() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this menu item?')) {
-      await deleteMenuItem(id);
-    }
+    confirmAlert({
+      title: 'Delete Menu Item',
+      message: 'Are you sure you want to delete this menu item?',
+      buttons: [
+        {
+          label: 'Yes, Delete',
+          onClick: async () => {
+            await deleteMenuItem(id);
+          },
+          className: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700'
+        },
+        {
+          label: 'Cancel',
+          onClick: () => {},
+          className: 'bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400'
+        }
+      ]
+    });
   };
 
   // Derive shown items by selected main/sub (client-side, uses allMenuItems from hook)
@@ -274,7 +368,7 @@ export function Menu() {
 
                 return (
                   <div key={main}>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 group/main">
                       <button
                         onClick={() => toggleMainExpanded(main)}
                         className="p-1 hover:bg-gray-100 rounded"
@@ -301,6 +395,33 @@ export function Menu() {
                           <span className="text-xs text-gray-500">({mainItemCount})</span>
                         </div>
                       </button>
+
+                      {/* Edit/Delete buttons for main category - shown on hover */}
+                      <div className="opacity-0 group-hover/main:opacity-100 transition-opacity flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Find any category row with this main_category to edit
+                            const catRow = categoryRows.find(r => r.main_category === main && !r.sub_category);
+                            if (catRow) openEditCategory(catRow);
+                          }}
+                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                          title="Edit category"
+                        >
+                          <Edit size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const catRow = categoryRows.find(r => r.main_category === main && !r.sub_category);
+                            if (catRow) deleteCategory(catRow);
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          title="Delete category"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Subcategories */}
@@ -313,23 +434,49 @@ export function Menu() {
                           const isSubSelected = selectedSubId === subRow.id;
 
                           return (
-                            <div key={subRow.id} className="group relative">
-                              <button
-                                onClick={() => {
-                                  setSelectedMain(main);
-                                  setSelectedSubId(subRow.id);
-                                }}
-                                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                                  isSubSelected
-                                    ? 'bg-blue-50 text-blue-700 border border-blue-200' 
-                                    : 'text-gray-600 hover:bg-gray-50'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span>{subRow.sub_category ?? '(no sub)'}</span>
-                                  <span className="text-xs text-gray-500">({subItemCount})</span>
+                            <div key={subRow.id} className="group/sub relative">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setSelectedMain(main);
+                                    setSelectedSubId(subRow.id);
+                                  }}
+                                  className={`flex-1 text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                                    isSubSelected
+                                      ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                                      : 'text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span>{subRow.sub_category ?? '(no sub)'}</span>
+                                    <span className="text-xs text-gray-500">({subItemCount})</span>
+                                  </div>
+                                </button>
+
+                                {/* Edit/Delete buttons for subcategory */}
+                                <div className="opacity-0 group-hover/sub:opacity-100 transition-opacity flex gap-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openEditCategory(subRow);
+                                    }}
+                                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                    title="Edit subcategory"
+                                  >
+                                    <Edit size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteCategory(subRow);
+                                    }}
+                                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                    title="Delete subcategory"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
                                 </div>
-                              </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -433,6 +580,9 @@ export function Menu() {
                       Price
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      VAT
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Available
                     </th>
                     <th className="relative px-6 py-3">
@@ -458,6 +608,15 @@ export function Menu() {
                       )}
                       <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">
                         {formatCurrency(item.price, settings?.currency || 'OMR')}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          (item as any).apply_vat 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {(item as any).apply_vat ? 'Yes' : 'No'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <label className="relative inline-flex items-center cursor-pointer">
@@ -601,6 +760,69 @@ export function Menu() {
                 <button onClick={() => { setIsSubModalOpen(false); setSubModalMainPrefill(null); }} className="px-4 py-2 bg-gray-100 rounded">Cancel</button>
                 <button onClick={createSubcategory} disabled={catSaving} className={`px-4 py-2 rounded ${catSaving ? 'bg-gray-300' : 'bg-green-600 text-white'}`}>
                   {catSaving ? 'Saving...' : 'Create Subcategory'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {isEditCatModalOpen && editingCategory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Edit Category</h3>
+              <button 
+                onClick={() => { 
+                  setIsEditCatModalOpen(false); 
+                  setEditingCategory(null); 
+                }} 
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Main Category</label>
+                <input
+                  value={editMain}
+                  onChange={(e) => setEditMain(e.target.value)}
+                  className="w-full rounded border p-2"
+                  placeholder="e.g. Starters"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Sub Category (optional)</label>
+                <input
+                  value={editSub}
+                  onChange={(e) => setEditSub(e.target.value)}
+                  className="w-full rounded border p-2"
+                  placeholder="e.g. Soups"
+                />
+              </div>
+
+              {catError && <div className="text-red-600 text-sm">{catError}</div>}
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button 
+                  onClick={() => { 
+                    setIsEditCatModalOpen(false); 
+                    setEditingCategory(null); 
+                  }} 
+                  className="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={updateCategory} 
+                  disabled={catSaving} 
+                  className={`px-4 py-2 rounded ${catSaving ? 'bg-gray-300' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                >
+                  {catSaving ? 'Saving...' : 'Update'}
                 </button>
               </div>
             </div>

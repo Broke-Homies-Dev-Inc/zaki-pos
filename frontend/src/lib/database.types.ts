@@ -186,6 +186,7 @@ export interface Database {
           tax_amount: number
           updated_at: string
           waiter_id: string | null
+          delivery_driver_id: string | null
         }
         Insert: {
           created_at?: string
@@ -198,6 +199,7 @@ export interface Database {
           tax_amount: number
           updated_at?: string
           waiter_id?: string | null
+          delivery_driver_id?: string | null
         }
         Update: {
           created_at?: string
@@ -210,12 +212,19 @@ export interface Database {
           tax_amount?: number
           updated_at?: string
           waiter_id?: string | null
+          delivery_driver_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "orders_waiter_id_fkey"
             columns: ["waiter_id"]
             referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_delivery_driver_id_fkey"
+            columns: ["delivery_driver_id"]
+            referencedRelation: "delivery_drivers"
             referencedColumns: ["id"]
           }
         ]
@@ -298,6 +307,42 @@ export interface Database {
         }
         Relationships: []
       }
+      delivery_drivers: {
+        Row: {
+          id: string
+          name: string
+          employee_id: string
+          phone_number: string | null
+          vehicle_type: string | null
+          vehicle_number: string | null
+          status: "active" | "inactive" | "on_delivery" | "on_break"
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          employee_id: string
+          phone_number?: string | null
+          vehicle_type?: string | null
+          vehicle_number?: string | null
+          status?: "active" | "inactive" | "on_delivery" | "on_break"
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          employee_id?: string
+          phone_number?: string | null
+          vehicle_type?: string | null
+          vehicle_number?: string | null
+          status?: "active" | "inactive" | "on_delivery" | "on_break"
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -309,6 +354,7 @@ export interface Database {
       order_status: "pending" | "completed" | "cancelled"
       payment_method: "cash" | "card" | "digital"
       waiter_status: "active" | "inactive" | "on_break"
+      delivery_driver_status: "active" | "inactive" | "on_delivery" | "on_break"
     }
     CompositeTypes: {
       [_ in never]: never

@@ -8,10 +8,19 @@ import customerRoutes from './customer';
 import reportsRoutes from './reports';
 import waiterRoutes from './waiter';
 import uploadRoutes from './upload';
+import deliveryDriverRoutes from './deliveryDriver';
+import orderExpiryRoutes from './orderExpiry';
+import authRoutes from './auth';
+import usersRoutes from './users';
+import rolesRoutes from './roles';
+import refundRoutes from './refund';
 
 
 const router = Router();
 
+router.use('/auth', authRoutes);
+router.use('/users', usersRoutes);
+router.use('/roles', rolesRoutes);
 router.use('/menu', menuRoutes);
 router.use('/orders', orderRoutes);
 router.use('/inventory', inventoryRoutes);
@@ -21,5 +30,8 @@ router.use('/customers', customerRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/waiters', waiterRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/delivery-drivers', deliveryDriverRoutes);
+router.use('/order-expiry', orderExpiryRoutes);
+router.use('/refunds', refundRoutes);
 
 export default router;

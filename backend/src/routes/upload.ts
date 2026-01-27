@@ -49,9 +49,9 @@ router.post('/menu-item-image', upload.single('image'), async (req: Request, res
 
     const sanitizedSubCategory = sub_category
       ? sub_category
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
       : null;
 
     // Build the directory path
@@ -78,7 +78,7 @@ router.post('/menu-item-image', upload.single('image'), async (req: Request, res
       .toFile(filePath);
 
     // Build the URL
-    const imageServerBaseUrl = process.env.IMAGE_SERVER_URL || 'http://hdz.stevefez.com:8080/images/menu';
+    const imageServerBaseUrl = process.env.IMAGE_SERVER_URL || 'https://zakitrading.om/images/menu';
     let imageUrl: string;
 
     if (sanitizedSubCategory) {
@@ -104,7 +104,7 @@ router.delete('/menu-item-image', async (req: Request, res: Response) => {
     }
 
     // Extract the path from the URL
-    const imageServerBaseUrl = process.env.IMAGE_SERVER_URL || 'http://hdz.stevefez.com:8080/images/menu';
+    const imageServerBaseUrl = process.env.IMAGE_SERVER_URL || 'https://zakitrading.om/images/menu';
     const relativePath = image_url.replace(imageServerBaseUrl, '');
     const filePath = path.join('/srv/zaki/image-server/images/menu', relativePath);
 

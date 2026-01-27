@@ -13,7 +13,8 @@ const testOrder = {
     notes: null,
     restaurant_table_id: null,
     take_away_method: null,
-    car_details: null,
+    car_make: null,
+    car_license_plate: null,
     delivery_address: null
   },
   items: [

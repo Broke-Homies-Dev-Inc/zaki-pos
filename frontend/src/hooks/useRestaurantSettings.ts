@@ -14,7 +14,10 @@ export interface RestaurantSettings {
   points_value: number;
   print_preview_enabled: boolean;
   currency?: string;
-  min_points_to_redeem: number; // <-- ADDED THIS LINE
+  min_points_to_redeem: number;
+  timer_green_threshold: number;
+  timer_orange_threshold: number;
+  order_expiry_time: number;
 }
 
 // Default state
@@ -28,8 +31,11 @@ const defaultSettings: RestaurantSettings = {
   loyalty_points_per_100: 10,
   points_value: 0.1,
   print_preview_enabled: true,
-  min_points_to_redeem: 200, // <-- ADDED THIS LINE
+  min_points_to_redeem: 200,
   currency: 'OMR',
+  timer_green_threshold: 10,
+  timer_orange_threshold: 20,
+  order_expiry_time: 60,
 };
 
 export function useRestaurantSettings() {

@@ -66,8 +66,14 @@ app.get('/api/health', (_req, res) => {
   // Try to verify DB connection (will set dbConnected)
   await checkDatabaseConnection();
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`✅ Backend server running at http://localhost:${port}`);
     console.log(`   DB connected: ${dbConnected}`);
+  });
+
+  // Setup WebSocket
+  import('./websocket').then(({ setupWebSocket, connectToWaiterDev }) => {
+    setupWebSocket(server);
+    connectToWaiterDev();
   });
 })();

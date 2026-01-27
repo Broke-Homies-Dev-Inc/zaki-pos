@@ -8,7 +8,8 @@ interface ActiveOrderSummary {
   grand_total: number;
   subtotal?: number;
   tax_amount?: number;
-  status: 'pending' | 'completed' | 'cancelled';
+  status: 'pending' | 'completed' | 'cancelled' | 'confirmed' | 'preparing' | 'ready';
+  order_type?: 'dine_in' | 'take_away' | 'delivery' | 'online_delivery';
   created_at: string;
   customer_id: string | null;
   customer_mobile: string | null; // <-- ADDED
@@ -29,6 +30,8 @@ export interface RestaurantTable {
   table_name: string;
   section_id: string;
   table_status: string;
+  combined_with_tables?: string | null;
+  is_part_of_combination?: boolean;
   active_order: ActiveOrderSummary | null;
 }
 // ---------------------------------------------
@@ -37,6 +40,7 @@ export interface Section {
   section_id: string;
   section_name: string;
   floor_id: string;
+  apply_vat?: boolean;
   tables: RestaurantTable[];
 }
 

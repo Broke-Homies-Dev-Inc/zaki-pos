@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import { useSocket } from './useSocket';
 
 interface DashboardStats {
   todayRevenue: number;
@@ -16,7 +17,7 @@ export function useDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get<DashboardStats>('/dashboard');
@@ -28,16 +29,23 @@ export function useDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Listen for order creation events
+  useSocket('order:created', () => {
+    console.log('📊 Order created - refreshing dashboard stats');
+    fetchStats();
+  });
+
+  // Listen for order completion events
+  useSocket('order:completed', () => {
+    console.log('📊 Order completed - refreshing dashboard stats');
+    fetchStats();
+  });
 
   useEffect(() => {
     fetchStats();
-    
-    // Refresh stats every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
-    
-    return () => clearInterval(interval);
-  }, []);
+  }, [fetchStats]);
 
   return { stats, loading, error, refetch: fetchStats };
 }

@@ -3,13 +3,22 @@ import { pool } from '../server';
 
 const router = Router();
 
-// GET all waiters (active and on break)
+// GET all waiters (including inactive if requested)
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM waiters WHERE status IN ($1, $2) ORDER BY name',
-      ['active', 'on_break']
-    );
+    const { include_inactive } = req.query;
+    
+    let query = 'SELECT * FROM waiters';
+    let params: string[] = [];
+    
+    if (include_inactive !== 'true') {
+      query += ' WHERE status IN ($1, $2) ORDER BY name';
+      params = ['active', 'on_break'];
+    } else {
+      query += ' ORDER BY name';
+    }
+    
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching waiters:', error);
@@ -17,9 +26,19 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET all waiters with statistics
+// GET all waiters with statistics (including inactive if requested)
 router.get('/with-stats', async (req: Request, res: Response) => {
   try {
+    const { include_inactive } = req.query;
+    
+    let whereClause = '';
+    let params: string[] = [];
+    
+    if (include_inactive !== 'true') {
+      whereClause = 'WHERE w.status IN ($1, $2)';
+      params = ['active', 'on_break'];
+    }
+    
     const result = await pool.query(`
       SELECT 
         w.id,
@@ -34,10 +53,10 @@ router.get('/with-stats', async (req: Request, res: Response) => {
         COALESCE(SUM(CASE WHEN o.status = 'completed' AND o.created_at::date = CURRENT_DATE THEN o.grand_total ELSE 0 END), 0) AS sales_today
       FROM waiters w
       LEFT JOIN orders o ON w.id = o.waiter_id
-      WHERE w.status IN ('active', 'on_break')
+      ${whereClause}
       GROUP BY w.id, w.name, w.employee_id, w.phone_number, w.status, w.created_at, w.updated_at
       ORDER BY w.name
-    `);
+    `, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching waiters with stats:', error);

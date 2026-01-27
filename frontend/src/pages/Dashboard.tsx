@@ -16,11 +16,19 @@ const StatCard = ({
 }: {
     title: string;
     value: string;
-    icon: React.ElementType;
+    icon?: React.ElementType;
     change: string;
     color: string;
 }) => {
-    const iconColorClass = `bg-${color}-100 text-${color}-600`;
+    // Properly map colors to Tailwind classes (dynamic class generation doesn't work with Tailwind)
+    const colorClasses = {
+        blue: 'bg-blue-100 text-blue-600',
+        orange: 'bg-orange-100 text-orange-600',
+        green: 'bg-green-100 text-green-600',
+        red: 'bg-red-100 text-red-600',
+    };
+
+    const iconColorClass = colorClasses[color as keyof typeof colorClasses] || 'bg-gray-100 text-gray-600';
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-sm">
@@ -34,9 +42,11 @@ const StatCard = ({
                     </span>
                     <span className="text-xs text-gray-500">{change}</span>
                 </div>
-                <div className={`p-3 rounded-full ${iconColorClass}`}>
-                    <Icon className="h-6 w-6" />
-                </div>
+                {Icon && (
+                    <div className={`p-3 rounded-full ${iconColorClass}`}>
+                        <Icon className="h-6 w-6" />
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -72,7 +82,6 @@ export function Dashboard() {
         {
             title: "Today's Revenue",
             value: formatCurrency(stats.todayRevenue, settings?.currency || 'OMR'),
-            icon: Banknote,
             change: stats.revenueChange,
             color: "blue",
         },

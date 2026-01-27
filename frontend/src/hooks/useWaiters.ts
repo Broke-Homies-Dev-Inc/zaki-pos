@@ -27,11 +27,15 @@ export const useWaiters = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchWaiters = async (withStats = false) => {
+  const fetchWaiters = async (withStats = false, includeInactive = true) => {
     try {
       setLoading(true);
       const endpoint = withStats ? '/waiters/with-stats' : '/waiters';
-      const response = await api.get(endpoint);
+      const params = new URLSearchParams();
+      if (includeInactive) {
+        params.append('include_inactive', 'true');
+      }
+      const response = await api.get(`${endpoint}?${params.toString()}`);
       setWaiters(response.data);
       setError(null);
     } catch (err) {

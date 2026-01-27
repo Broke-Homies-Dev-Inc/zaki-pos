@@ -11,8 +11,14 @@ interface BillPreviewModalProps {
 export function BillPreviewModal({ bill, onClose }: BillPreviewModalProps) {
     const { settings } = useRestaurantSettings();
 
-    // Get tax rate from settings, default to 5% if not available
-    const taxRate = settings?.tax_rate ? Number(settings.tax_rate) / 100 : 0.05;
+    // Calculate the actual tax rate used for this bill based on subtotal and tax_amount
+    // This ensures we show the correct rate even if settings have changed since bill creation
+    const actualTaxRate = bill.orders.subtotal > 0 
+        ? (Number(bill.orders.tax_amount) / Number(bill.orders.subtotal))
+        : 0;
+    
+    // Use actual tax rate from bill, or fallback to current settings
+    const taxRate = actualTaxRate > 0 ? actualTaxRate : (settings?.tax_rate ? Number(settings.tax_rate) / 100 : 0.05);
 
     const handlePrint = () => {
         window.print();
@@ -151,7 +157,7 @@ export function BillPreviewModal({ bill, onClose }: BillPreviewModalProps) {
                                 <tr key={item.id} className="border-b">
                                     <td className="px-4 py-3">{index + 1}</td>
                                     <td className="px-4 py-3 font-medium text-gray-800">
-                                        {item.menu_items.name}
+                                        {item.menu_item_name}
                                     </td>
                                     <td className="px-4 py-3 text-right text-gray-900">
                                         {item.quantity}

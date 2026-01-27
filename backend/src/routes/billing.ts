@@ -13,12 +13,12 @@ function generateBillNumber(): string {
 // POST /api/billing/settle
 // This is a major transactional endpoint
 router.post('/settle', async (req: Request, res: Response) => {
-  const { 
-    order_id, 
-    table_id, 
-    payment_method, 
-    amount_paid, 
-    grand_total 
+  const {
+    order_id,
+    table_id,
+    payment_method,
+    amount_paid,
+    grand_total
   } = req.body;
 
   if (!order_id || !payment_method || !amount_paid) {
@@ -39,12 +39,58 @@ router.post('/settle', async (req: Request, res: Response) => {
     }
     const order = orderUpdateResult.rows[0];
 
-    // 2. If it was a dine-in order, mark the table as 'paid'
-    if (order.order_type === 'dine_in' && table_id) {
-      await client.query(
-        "UPDATE restaurant_tables SET status = 'paid', updated_at = NOW() WHERE id = $1;",
-        [table_id]
+    // 2. If it was a dine-in order, mark all linked tables as 'paid' and separate them
+    if (order.order_type === 'dine_in') {
+      // Get all tables linked to this order
+      const linkedTablesResult = await client.query(
+        "SELECT id FROM restaurant_tables WHERE linked_order_id = $1",
+        [order_id]
       );
+      
+      const linkedTableIds = linkedTablesResult.rows.map(row => row.id);
+      
+      if (linkedTableIds.length > 0) {
+        // Clear linked_order_id and set status to paid for all linked tables (they separate now)
+        await client.query(
+          "UPDATE restaurant_tables SET status = 'paid', linked_order_id = NULL, updated_at = NOW() WHERE id = ANY($1::uuid[])",
+          [linkedTableIds]
+        );
+        console.log(`✅ Marked ${linkedTableIds.length} linked tables as paid and separated them`);
+        
+        // Emit WebSocket event for table status update
+        try {
+          const { getIO } = await import('../websocket');
+          getIO().emit('posTableStatusUpdate', {
+            tableIds: linkedTableIds,
+            newStatus: 'paid',
+            source: 'pos-billing',
+            timestamp: new Date().toISOString()
+          });
+          console.log(`📤 Table status update emitted for ${linkedTableIds.length} tables`);
+        } catch (err) {
+          console.warn('WebSocket not available:', err);
+        }
+      } else if (table_id) {
+        // Fallback: single table
+        await client.query(
+          "UPDATE restaurant_tables SET status = 'paid', linked_order_id = NULL, updated_at = NOW() WHERE id = $1",
+          [table_id]
+        );
+        
+        // Emit WebSocket event for table status update
+        try {
+          const { getIO } = await import('../websocket');
+          getIO().emit('posTableStatusUpdate', {
+            tableIds: [table_id],
+            newStatus: 'paid',
+            source: 'pos-billing',
+            timestamp: new Date().toISOString()
+          });
+          console.log(`📤 Table status update emitted for table ${table_id}`);
+        } catch (err) {
+          console.warn('WebSocket not available:', err);
+        }
+      }
     }
 
     // 3. Deduct inventory (the same logic from the old 'complete' endpoint)
@@ -65,8 +111,17 @@ router.post('/settle', async (req: Request, res: Response) => {
        VALUES ($1, $2, $3, $4, $5)`,
       [order_id, billNumber, payment_method, amount_paid, changeDue]
     );
-    
+
     await client.query('COMMIT');
+
+    // Emit WebSocket event for order completion
+    try {
+      const { getIO } = await import('../websocket');
+      getIO().emit('order:completed', { orderId: order_id });
+    } catch (err) {
+      console.warn('WebSocket not available:', err);
+    }
+
     res.status(200).json({ success: true, message: 'Payment settled successfully.' });
 
   } catch (error) {

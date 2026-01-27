@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Printer, Save } from "lucide-react";
 import api from "../../lib/api";
+import { toast } from "react-toastify";
 
 interface PrintSettingsProps {
     onBack: () => void;
@@ -44,10 +45,10 @@ export function PrintSettings({ onBack }: PrintSettingsProps) {
                 print_preview_enabled: printPreviewEnabled,
             });
 
-            alert("Print settings saved successfully!");
+            toast.success("Print settings saved successfully!");
         } catch (error) {
             console.error("Error saving print settings:", error);
-            alert("Failed to save print settings. Please try again.");
+            toast.error("Failed to save print settings. Please try again.");
         } finally {
             setSaving(false);
         }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, Save, Gift } from "lucide-react";
 import api from "../../lib/api";
 import { useRestaurantSettingsContext } from "../../contexts/useRestaurantSettingsContext";
+import { toast } from "react-toastify";
 
 interface LoyaltySettingsProps {
     onBack: () => void;
@@ -42,7 +43,7 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
             console.log("Settings loaded successfully");
         } catch (error) {
             console.error("Error fetching loyalty settings:", error);
-            alert("Failed to load loyalty settings");
+            toast.error("Failed to load loyalty settings");
         } finally {
             setLoading(false);
         }
@@ -64,11 +65,11 @@ export function LoyaltySettings({ onBack }: LoyaltySettingsProps) {
             };
 
             await api.post("/setting/settings", updatedSettings);
-            alert("Loyalty settings saved successfully!");
+            toast.success("Loyalty settings saved successfully!");
             await refetch();
         } catch (error) {
             console.error("Error saving loyalty settings:", error);
-            alert("Failed to save loyalty settings");
+            toast.error("Failed to save loyalty settings");
         } finally {
             setSaving(false);
         }

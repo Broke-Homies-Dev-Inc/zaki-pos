@@ -5,6 +5,8 @@ import { InventoryItemModal } from '../components/InventoryItemModal';
 import { formatCurrency } from '../lib/utils';
 import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 import type { Database } from '../lib/database.types';
+import { confirmAlert } from 'react-confirm-alert';
+import 'react-confirm-alert/src/react-confirm-alert.css';
 
 type InventoryItem = Database['public']['Tables']['inventory']['Row'];
 
@@ -26,9 +28,24 @@ export function Ingredients() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this? This action cannot be undone.')) {
-      await deleteInventoryItem(id);
-    }
+    confirmAlert({
+      title: 'Delete Ingredient',
+      message: 'Are you sure you want to delete this? This action cannot be undone.',
+      buttons: [
+        {
+          label: 'Yes, Delete',
+          onClick: async () => {
+            await deleteInventoryItem(id);
+          },
+          className: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700'
+        },
+        {
+          label: 'Cancel',
+          onClick: () => {},
+          className: 'bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400'
+        }
+      ]
+    });
   };
 
   const { settings } = useRestaurantSettingsContext();

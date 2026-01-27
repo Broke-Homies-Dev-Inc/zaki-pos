@@ -1,5 +1,7 @@
 import { Plus, ChevronLeft, Trash2 } from 'lucide-react';
 import { useSettings, type Floor, type Section, type RestaurantTable } from '../../hooks/useSettings';
+import { confirmAlert } from 'react-confirm-alert';
+import 'react-confirm-alert/src/react-confirm-alert.css';
 
 // --- HELPER FUNCTIONS FOR AUTO-INCREMENTING ---
 
@@ -77,15 +79,41 @@ export default function CustomizeTables({ onBack }: CustomizeTablesProps) {
 
     // THE FIX: Full implementation of delete handlers
     const handleDeleteFloor = (floorId: string, floorName: string) => {
-        if (window.confirm(`Are you sure you want to delete "${floorName}"? This will also delete all its sections and tables.`)) {
-            deleteFloor(floorId);
-        }
+        confirmAlert({
+            title: 'Delete Floor',
+            message: `Are you sure you want to delete "${floorName}"? This will also delete all its sections and tables.`,
+            buttons: [
+                {
+                    label: 'Yes, Delete',
+                    onClick: () => deleteFloor(floorId),
+                    className: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700'
+                },
+                {
+                    label: 'Cancel',
+                    onClick: () => {},
+                    className: 'bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400'
+                }
+            ]
+        });
     };
 
     const handleDeleteSection = (sectionId: string, sectionName: string) => {
-        if (window.confirm(`Are you sure you want to delete "${sectionName}"? This will also delete all its tables.`)) {
-            deleteSection(sectionId);
-        }
+        confirmAlert({
+            title: 'Delete Section',
+            message: `Are you sure you want to delete "${sectionName}"? This will also delete all its tables.`,
+            buttons: [
+                {
+                    label: 'Yes, Delete',
+                    onClick: () => deleteSection(sectionId),
+                    className: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700'
+                },
+                {
+                    label: 'Cancel',
+                    onClick: () => {},
+                    className: 'bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400'
+                }
+            ]
+        });
     };
 
     const handleDeleteTable = (sectionId: string) => {
@@ -106,8 +134,23 @@ export default function CustomizeTables({ onBack }: CustomizeTablesProps) {
                 const maxNumber = Math.max(...tableNumbers);
                 const tableToDelete = section.tables.find(t => t.table_name === `Table ${maxNumber}`);
                 
-                if (tableToDelete && window.confirm(`Are you sure you want to delete "${tableToDelete.table_name}"?`)) {
-                    deleteTable(tableToDelete.table_id);
+                if (tableToDelete) {
+                    confirmAlert({
+                        title: 'Delete Table',
+                        message: `Are you sure you want to delete "${tableToDelete.table_name}"?`,
+                        buttons: [
+                            {
+                                label: 'Yes, Delete',
+                                onClick: () => deleteTable(tableToDelete.table_id),
+                                className: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700'
+                            },
+                            {
+                                label: 'Cancel',
+                                onClick: () => {},
+                                className: 'bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400'
+                            }
+                        ]
+                    });
                 }
             }
         }

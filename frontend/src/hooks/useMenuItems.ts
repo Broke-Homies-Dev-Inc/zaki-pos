@@ -10,6 +10,7 @@ export type MenuItem = Database['public']['Tables']['menu_items']['Row'] & {
   sub_category?: string | null;
   stock?: number;
   low_stock_threshold?: number;
+  apply_vat?: boolean;
 };
 
 export function useMenuItems() {

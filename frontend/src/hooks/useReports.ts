@@ -4,11 +4,13 @@ import api from '../lib/api';
 
 export type ReportKey =
   | 'work-period'
+  | "group-sales-amount"
+  | "group-sales-quantity"
   | 'item-sales'
   | 'cash-transactions'
   | 'inventory-transactions'
   | 'cost'
-  | 'talabat'
+  | 'online_delivery'
   | 'delivery'
   | 'takeaway'
   | 'vat/datewise'

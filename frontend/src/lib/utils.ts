@@ -51,6 +51,7 @@ export function formatDate(dateString: string): string {
 
 // Formats an order type string for display (e.g., 'dine_in' -> 'Dine In')
 export function formatOrderType(type: string): string {
+  if (type === 'online_delivery') return 'Online Delivery';
   return (type || 'dine_in')
     .replace('_', ' ')
     .replace(/\b\w/g, l => l.toUpperCase());
@@ -61,8 +62,29 @@ export function getStatusBadge(status: string): string {
   switch (status) {
     case 'completed': return 'bg-green-100 text-green-700';
     case 'pending': return 'bg-yellow-100 text-yellow-700';
+    case 'awaiting_confirmation': return 'bg-yellow-100 text-yellow-700';
+    case 'preparing': return 'bg-blue-100 text-blue-700';
+    case 'ready_for_pickup': return 'bg-green-100 text-green-700';
+    case 'out_for_delivery': return 'bg-purple-100 text-purple-700';
     case 'cancelled': return 'bg-red-100 text-red-700';
+    case 'confirmed': return 'bg-blue-100 text-blue-700';
+    case 'ready': return 'bg-green-100 text-green-700';
     default: return 'bg-gray-100 text-gray-700';
+  }
+}
+
+export function formatStatus(status: string): string {
+  switch (status) {
+    case 'awaiting_confirmation': return 'Awaiting Confirmation';
+    case 'preparing': return 'Preparing';
+    case 'ready_for_pickup': return 'Ready for Pickup';
+    case 'out_for_delivery': return 'Out for Delivery';
+    case 'completed': return 'Completed';
+    case 'cancelled': return 'Cancelled';
+    case 'pending': return 'Pending';
+    case 'confirmed': return 'Confirmed';
+    case 'ready': return 'Ready';
+    default: return status.charAt(0).toUpperCase() + status.slice(1);
   }
 }
 

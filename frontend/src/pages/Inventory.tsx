@@ -5,23 +5,25 @@ import { InventoryItemModal } from '../components/InventoryItemModal';
 import { useRestaurantSettingsContext } from '../contexts/useRestaurantSettingsContext';
 import type { Database } from '../lib/database.types';
 
+import { toast } from 'react-toastify';
+
 type InventoryItem = Database['public']['Tables']['inventory']['Row'];
 
 export function Inventory() {
   const { menuItems, adjustStock, updateMenuItem } = useMenuItems();
   const [isModalOpen, setModalOpen] = useState(false);
   const [editingItem] = useState<InventoryItem | null>(null);
-  
+
   // Stock adjustment modal for menu items
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [stockAdjustItem, setStockAdjustItem] = useState<any>(null);
   const [stockAdjustment, setStockAdjustment] = useState('');
   const [isAdjusting, setIsAdjusting] = useState(false);
-  
+
   // Low stock threshold editing
   const [editingThresholdId, setEditingThresholdId] = useState<string | null>(null);
   const [thresholdValue, setThresholdValue] = useState('');
-  
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -50,24 +52,24 @@ export function Inventory() {
     if (!stockAdjustItem || !stockAdjustment) return;
     const adjustment = parseInt(stockAdjustment);
     if (isNaN(adjustment)) {
-      alert('Please enter a valid whole number');
+      toast.error('Please enter a valid whole number');
       return;
     }
-    
+
     // Validate: adjustment must be a whole number
     if (!Number.isInteger(adjustment)) {
-      alert('Stock adjustment must be a whole number (no decimals)');
+      toast.error('Stock adjustment must be a whole number (no decimals)');
       return;
     }
-    
+
     // Validate: stock cannot go negative
     const currentStock = stockAdjustItem.stock ?? 0;
     const newStock = currentStock + adjustment;
     if (newStock < 0) {
-      alert(`Cannot reduce stock below 0. Current stock is ${currentStock}, attempted adjustment: ${adjustment}`);
+      toast.error(`Cannot reduce stock below 0. Current stock is ${currentStock}, attempted adjustment: ${adjustment}`);
       return;
     }
-    
+
     setIsAdjusting(true);
     try {
       await adjustStock(stockAdjustItem.id, adjustment);
@@ -75,7 +77,7 @@ export function Inventory() {
       setStockAdjustItem(null);
       setStockAdjustment('');
     } catch (err) {
-      alert('Failed to adjust stock');
+      toast.error('Failed to adjust stock');
     } finally {
       setIsAdjusting(false);
     }
@@ -103,7 +105,7 @@ export function Inventory() {
     // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      const matchesSearch = 
+      const matchesSearch =
         item.name.toLowerCase().includes(query) ||
         item.category.toLowerCase().includes(query) ||
         item.sub_category?.toLowerCase().includes(query);
@@ -227,20 +229,20 @@ export function Inventory() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    {item.stock === 0  ? (
+                    {item.stock === 0 ? (
                       <div className="flex items-center justify-center gap-2">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-800 bg-red-100 rounded-lg border-2 border-red-300">
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                           </svg>
                           Out of Stock
                         </span>
                       </div>
-                    ) : (item.low_stock_threshold && item.stock && item.stock <= item.low_stock_threshold && item.stock >=0 ) ? (
+                    ) : (item.low_stock_threshold && item.stock && item.stock <= item.low_stock_threshold && item.stock >= 0) ? (
                       <div className="flex items-center justify-center gap-2">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-100 rounded-lg border-2 border-amber-300 animate-pulse">
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                           </svg>
                           Low Stock Warning
                         </span>
@@ -248,7 +250,7 @@ export function Inventory() {
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-800 bg-green-100 rounded-lg border border-green-200">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
                         In Stock
                       </span>
@@ -375,6 +377,16 @@ export function Inventory() {
                 placeholder="e.g., +10 or -5"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 step="1"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && stockAdjustment) {
+                    handleAdjustStock();
+                  } else if (e.key === 'Escape') {
+                    setIsStockModalOpen(false);
+                    setStockAdjustItem(null);
+                    setStockAdjustment('');
+                  }
+                }}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Use positive numbers to add stock, negative to subtract (whole numbers only)

@@ -1,0 +1,3 @@
+-- This migration has been removed as billing_number is not needed
+-- The system uses receipt_number instead for unique identification
+-- Order numbers reset daily, receipt numbers are globally unique
